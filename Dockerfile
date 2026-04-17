@@ -17,7 +17,10 @@ FROM bitnamilegacy/moodle:latest
 # renovate: datasource=github-tags depName=moodle/moodle
 ARG MOODLE_VERSION=v5.1.4
 
-COPY --from=moodle-src /moodle /opt/bitnami/moodle
+# Update moodle
+RUN rm -rf /opt/bitnami/moodle /bitnami/moodle
+COPY --from=moodle-src --chown=1001:1001 /moodle /opt/bitnami/moodle
+COPY --from=moodle-src --chown=1001:1001 /moodle /bitnami/moodle
 
 ENV APP_VERSION=$MOODLE_VERSION
 
