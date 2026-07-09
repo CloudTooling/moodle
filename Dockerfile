@@ -3,21 +3,23 @@
 
 FROM docker.io/bitnami/minideb:bookworm
 
+# renovate: datasource=github-tags depName=moodle/moodle
+ARG MOODLE_VERSION="5.2.1"
 ARG DOWNLOADS_URL="https://downloads.bitnami.com/files/stacksmith"
 ARG EXTRA_LOCALES
 ARG TARGETARCH
 ARG WITH_ALL_LOCALES="no"
 
-LABEL org.opencontainers.image.base.name="docker.io/bitnami/minideb:bookworm" \
-      org.opencontainers.image.created="2026-06-24T18:26:50Z" \
-      org.opencontainers.image.description="Application packaged by Broadcom, Inc." \
-      org.opencontainers.image.documentation="https://github.com/bitnami/containers/tree/main/bitnami/moodle/README.md" \
-      org.opencontainers.image.source="https://github.com/bitnami/containers/tree/main/bitnami/moodle" \
-      org.opencontainers.image.title="moodle" \
-      org.opencontainers.image.vendor="Broadcom, Inc." \
-      org.opencontainers.image.version="5.2.1"
+LABEL org.opencontainers.image.authors='Martin Reinhardt (martin@m13t.de)' \
+    org.opencontainers.image.created=$BUILD_DATE \
+    org.opencontainers.image.version=$APP_VERSION \
+    org.opencontainers.image.url='https://hub.docker.com/r/cloudtooling/moodle' \
+    org.opencontainers.image.documentation='https://github.com/CloudTooling/moodle' \
+    org.opencontainers.image.source='https://github.com/CloudTooling/moodle.git' \
+    org.opencontainers.image.licenses='APACHE-2.0'
 
 ENV OS_ARCH="${TARGETARCH:-amd64}" \
+    MOODLE_VERSION="${MOODLE_VERSION}" \
     OS_FLAVOUR="debian-12" \
     OS_NAME="linux"
 
@@ -35,7 +37,7 @@ RUN --mount=type=secret,id=downloads_url,env=SECRET_DOWNLOADS_URL \
       "postgresql-client-14.23.0-0-linux-${OS_ARCH}-debian-12" \
       "mysql-client-12.3.2-1-linux-${OS_ARCH}-debian-12" \
       "libphp-8.4.22-1-linux-${OS_ARCH}-debian-12" \
-      "moodle-5.2.1-0-linux-${OS_ARCH}-debian-12" \
+      "moodle-${MOODLE_VERSION}-0-linux-${OS_ARCH}-debian-12" \
     ) ; \
     for COMPONENT in "${COMPONENTS[@]}"; do \
       if [ ! -f "${COMPONENT}.tar.gz" ]; then \
@@ -65,7 +67,7 @@ RUN /opt/bitnami/scripts/moodle/postunpack.sh
 RUN /opt/bitnami/scripts/mysql-client/postunpack.sh
 ENV APACHE_HTTPS_PORT_NUMBER="" \
     APACHE_HTTP_PORT_NUMBER="" \
-    APP_VERSION="5.2.1" \
+    APP_VERSION="${MOODLE_VERSION}" \
     BITNAMI_APP_NAME="moodle" \
     IMAGE_REVISION="3" \
     LANG="en_US.UTF-8" \
