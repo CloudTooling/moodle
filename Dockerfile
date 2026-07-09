@@ -4,7 +4,7 @@
 FROM docker.io/bitnami/minideb:bookworm
 
 # renovate: datasource=github-tags depName=moodle/moodle
-ARG MOODLE_VERSION="5.2.1"
+ARG MOODLE_VERSION="5.0.3"
 ARG DOWNLOADS_URL="https://downloads.bitnami.com/files/stacksmith"
 ARG EXTRA_LOCALES
 ARG TARGETARCH
