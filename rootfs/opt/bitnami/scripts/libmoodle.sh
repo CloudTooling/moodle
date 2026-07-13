@@ -47,11 +47,6 @@ moodle_validate() {
         error "$1"
         error_code=1
     }
-    check_empty_value() {
-        if is_empty_value "${!1}"; then
-            print_validation_error "${1} must be set"
-        fi
-    }
     check_multi_value() {
         if [[ " ${2} " != *" ${!1} "* ]]; then
             print_validation_error "The allowed values for ${1} are: ${2}"
@@ -71,15 +66,12 @@ moodle_validate() {
     }
 
     # Validate credentials
-    check_empty_value "MOODLE_PASSWORD"
     if is_boolean_yes "$ALLOW_EMPTY_PASSWORD"; then
         warn "You set the environment variable ALLOW_EMPTY_PASSWORD=${ALLOW_EMPTY_PASSWORD}. For safety reasons, do not use this flag in a production environment."
     else
-        is_empty_value "${MOODLE_DATABASE_PASSWORD}" && print_validation_error "The MOODLE_DATABASE_PASSWORD environment variable is empty or not set. Set the environment variable ALLOW_EMPTY_PASSWORD=yes to allow a blank password. This is only recommended for development environments."
-    fi
-
-    if is_empty_value "$MOODLE_HOST"; then
-        warn "MOODLE_HOST is not set, wwwroot will be constructed based on HTTP_HOST header which opens up vulnerability to password-reset poisoning attacks. Do not leave this variable empty in production environments."
+        for empty_env_var in "MOODLE_DATABASE_PASSWORD" "MOODLE_PASSWORD"; do
+            is_empty_value "${!empty_env_var}" && print_validation_error "The ${empty_env_var} environment variable is empty or not set. Set the environment variable ALLOW_EMPTY_PASSWORD=yes to allow a blank password. This is only recommended for development environments."
+        done
     fi
 
     # Validate SMTP credentials
@@ -87,8 +79,8 @@ moodle_validate() {
         for empty_env_var in "MOODLE_SMTP_USER" "MOODLE_SMTP_PASSWORD"; do
             is_empty_value "${!empty_env_var}" && warn "The ${empty_env_var} environment variable is empty or not set."
         done
-        check_empty_value "MOODLE_SMTP_PORT_NUMBER"
-        check_valid_port "MOODLE_SMTP_PORT_NUMBER"
+        is_empty_value "$MOODLE_SMTP_PORT_NUMBER" && print_validation_error "The MOODLE_SMTP_PORT_NUMBER environment variable is empty or not set."
+        ! is_empty_value "$MOODLE_SMTP_PORT_NUMBER" && check_valid_port "MOODLE_SMTP_PORT_NUMBER"
     fi
 
     # Compatibility with older images where 'moodledata' was located inside the 'htdocs' directory
@@ -110,6 +102,23 @@ moodle_validate() {
 }
 
 ########################
+# Bypass Azure for ManagedDB database version check
+# We detected some issues in the way that Azure Database for MariaDB
+# shows the version. This hack will bypass the Moodle installation check
+# Globals:
+#   MOODLE_*
+# Arguments:
+#   None
+# Returns:
+#   None
+#########################
+moodle_fix_manageddb_check() {
+    info "Changing minimum required MariaDB version to $MOODLE_DATABASE_MIN_VERSION"
+    replace_in_file "$MOODLE_BASE_DIR/admin/environment.xml" "name=\"mariadb\" version=\"[^\"]+\"" "name=\"mariadb\" version=\"$MOODLE_DATABASE_MIN_VERSION\""
+    replace_in_file "$MOODLE_BASE_DIR/admin/environment.xml" "name=\"mysql\" version=\"[^\"]+\"" "name=\"mysql\" version=\"$MOODLE_DATABASE_MIN_VERSION\""
+}
+
+########################
 # Ensure Moodle is initialized
 # Globals:
 #   MOODLE_*
@@ -128,7 +137,7 @@ moodle_initialize() {
         for dir in "$MOODLE_VOLUME_DIR" "$MOODLE_DATA_DIR"; do
             ensure_dir_exists "$dir"
             # Use daemon:root ownership for compatibility when running as a non-root user
-            am_i_root && configure_permissions_ownership "$dir" -d "775" -f "664" -u "$WEB_SERVER_DAEMON_USER" -g "root" -n
+            am_i_root && configure_permissions_ownership "$dir" -d "775" -f "664" -u "$WEB_SERVER_DAEMON_USER" -g "root"
         done
 
         info "Trying to connect to the database server"
@@ -165,7 +174,7 @@ moodle_initialize() {
             [[ "$db_type" = "pgsql" ]] && db_remote_execute="postgresql_remote_execute"
             local -a db_execute_args=("$db_host" "$db_port" "$db_name" "$db_user" "$db_pass")
             # Configure no-reply e-mail address for SMTP
-            echo "INSERT INTO ${mdl_prefix}config (name, value) VALUES ('noreplyaddress', '${MOODLE_EMAIL}')" | "$db_remote_execute" "${db_execute_args[@]}"
+	    echo "INSERT INTO ${mdl_prefix}config (name, value) VALUES ('noreplyaddress', '${MOODLE_EMAIL}')" | "$db_remote_execute" "${db_execute_args[@]}"
             # Additional Bitnami customizations
             echo "UPDATE ${mdl_prefix}course SET summary='Moodle powered by Bitnami' WHERE id='1'" | "$db_remote_execute" "${db_execute_args[@]}"
             # SMTP configuration
@@ -187,12 +196,10 @@ EOF
             info "Running database upgrade"
             moodle_upgrade
         fi
-        # Change wwwroot configuration
+        # Change wwwroot configuration so the Moodle site can be accessible from anywhere
         moodle_configure_wwwroot
         # Turn on Moodle's reverseproxy (also sslproxy if using ssl) so we can use the reverse proxy
-        if is_boolean_yes "$MOODLE_REVERSEPROXY" || is_boolean_yes "$MOODLE_SSLPROXY"; then
-            moodle_configure_reverseproxy
-        fi
+        moodle_configure_reverseproxy
 
         info "Persisting Moodle installation"
         persist_app "$app_name" "$MOODLE_DATA_TO_PERSIST"
@@ -337,12 +344,14 @@ moodle_install() {
         "--agree-license"
         "$@"
     )
+    # HACK: Change database version check for Azure Database for MariaDB
+    ! is_empty_value "$MOODLE_DATABASE_MIN_VERSION" && moodle_fix_manageddb_check
     pushd "$MOODLE_BASE_DIR" >/dev/null || exit
     # Run as web server user to avoid having to change permissions/ownership afterwards
     if am_i_root; then
         debug_execute run_as_user "$WEB_SERVER_DAEMON_USER" "${moodle_install_args[@]}"
         # Remove write permissions for the web server to the config.php file
-        configure_permissions_ownership "$MOODLE_CONF_FILE" -f "640" -u "root" -g "$WEB_SERVER_DAEMON_GROUP"
+        configure_permissions_ownership "$MOODLE_CONF_FILE" -f "644" -u "root" -g "$WEB_SERVER_DAEMON_GROUP"
     else
         debug_execute "${moodle_install_args[@]}"
     fi
