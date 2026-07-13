@@ -30,6 +30,74 @@ elif [[ -f /opt/bitnami/scripts/libpostgresql.sh ]]; then
 fi
 
 ########################
+# Migrate a persisted Moodle codebase predating the Moodle 5.1 "/public" document root split
+# Moodle 5.1 moved all web-accessible code under a new "public/" directory (keeping config.php and
+# admin/cli/* at the root); the Apache vhost baked into this image already points at
+# "${MOODLE_BASE_DIR}/public", so a persisted volume created by an older image (no "public/") would
+# 403 forever once restore_persisted_app() symlinks it in, since Apache's document root no longer
+# exists on disk. This mirrors Moodle's own documented migration (keep config.php + custom plugins,
+# take fresh core code) so it also works when the running codebase itself is on the persisted volume.
+# Globals:
+#   MOODLE_BASE_DIR
+#   MOODLE_VOLUME_DIR
+#   MOODLE_DATA_DIR
+#   BITNAMI_VOLUME_DIR
+#   WEB_SERVER_DAEMON_USER
+# Arguments:
+#   None
+# Returns:
+#   None
+#########################
+moodle_migrate_to_public_layout() {
+    ! is_boolean_yes "${MOODLE_SKIP_PUBLIC_MIGRATION:-no}" || return 0
+    [[ ! -e "${MOODLE_VOLUME_DIR}/public" && -d "${MOODLE_BASE_DIR}/public" ]] || return 0
+
+    info "Persisted Moodle codebase predates the /public layout, migrating in place"
+
+    local -r backup_file="${MOODLE_DATA_DIR}/moodle-pre-public-migration-$(date +%Y%m%d%H%M%S).tar.gz"
+    info "Backing up the pre-migration codebase to ${backup_file}"
+    tar -C "$(dirname "$MOODLE_VOLUME_DIR")" -czf "$backup_file" "$(basename "$MOODLE_VOLUME_DIR")"
+
+    local -r staging_dir="${BITNAMI_VOLUME_DIR}/.moodle-public-migration"
+    local -r fresh_public_dir="${BITNAMI_VOLUME_DIR}/.moodle-public-migration-fresh-public"
+    rm -rf "$staging_dir" "$fresh_public_dir"
+    # Start from a pristine copy of the code shipped with this image (already split correctly)
+    cp -a "${MOODLE_BASE_DIR}/." "$staging_dir/"
+    mv "$staging_dir/public" "$fresh_public_dir"
+    mkdir -p "$staging_dir/public"
+
+    # Relocate the site configuration, which stays at the root in the new layout too
+    cp -a "${MOODLE_VOLUME_DIR}/config.php" "$staging_dir/config.php"
+
+    # Relocate the admin area, keeping the CLI scripts at the root
+    mkdir -p "$staging_dir/public/admin"
+    find "${MOODLE_VOLUME_DIR}/admin" -mindepth 1 -maxdepth 1 ! -name cli -exec cp -a {} "$staging_dir/public/admin/" \;
+
+    # Relocate the library, keeping the handful of files the root CLI bootstrap needs
+    mkdir -p "$staging_dir/public/lib"
+    find "${MOODLE_VOLUME_DIR}/lib" -mindepth 1 -maxdepth 1 \
+        ! -name setup.php ! -name behat ! -name js ! -name components.json ! -name plugins.json ! -name thirdpartylibs.xml \
+        -exec cp -a {} "$staging_dir/public/lib/" \;
+
+    # Relocate everything else: core areas as well as any custom/third-party plugins
+    find "${MOODLE_VOLUME_DIR}" -mindepth 1 -maxdepth 1 ! -name admin ! -name lib ! -name config.php \
+        -exec cp -a {} "$staging_dir/public/" \;
+
+    # Overlay the fresh core on top: core files get updated, anything found only in the old
+    # install (customizations, third-party plugins) is left as migrated above.
+    cp -a "${fresh_public_dir}/." "$staging_dir/public/"
+    rm -rf "$fresh_public_dir"
+
+    am_i_root && configure_permissions_ownership "$staging_dir" -d "775" -f "664" -u "$WEB_SERVER_DAEMON_USER" -g "root"
+
+    find "${MOODLE_VOLUME_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} \;
+    cp -a "${staging_dir}/." "${MOODLE_VOLUME_DIR}/"
+    rm -rf "$staging_dir"
+
+    info "Finished migrating the persisted Moodle codebase to the /public layout"
+}
+
+########################
 # Validate settings in MOODLE_* env vars
 # Globals:
 #   MOODLE_*
@@ -197,6 +265,8 @@ EOF
         info "Persisting Moodle installation"
         persist_app "$app_name" "$MOODLE_DATA_TO_PERSIST"
     else
+        moodle_migrate_to_public_layout
+
         info "Restoring persisted Moodle installation"
         restore_persisted_app "$app_name" "$MOODLE_DATA_TO_PERSIST"
 
