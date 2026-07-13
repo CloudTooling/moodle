@@ -21,7 +21,7 @@ jobs:
       DOCKER_IMAGE_NAME: cloudtooling/moodle
       VERSION_FILE: config.json
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Write version vars
         id: version-vars
