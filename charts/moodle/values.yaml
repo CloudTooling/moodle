@@ -411,12 +411,18 @@ containerSecurityContext:
 ## @param startupProbe.successThreshold Success threshold for startupProbe
 ##
 startupProbe:
-  enabled: false
+  # Enabled by default (unlike upstream bitnami/moodle): a persisted volume crossing the Moodle
+  # 5.1 "/public" layout boundary runs a one-time codebase migration plus a full admin/cli/upgrade.php
+  # pass before Apache ever binds its port, which can comfortably run well past a typical liveness
+  # probe's budget. startupProbe only gates the *first* successful boot of a given pod, then hands
+  # off to livenessProbe/readinessProbe as normal, so a generous failureThreshold here costs nothing
+  # in steady-state operation.
+  enabled: true
   path: /login/index.php
   initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 5
-  failureThreshold: 60
+  failureThreshold: 180
   successThreshold: 1
 ## @param livenessProbe.enabled Enable livenessProbe
 ## @param livenessProbe.initialDelaySeconds Initial delay seconds for livenessProbe

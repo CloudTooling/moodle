@@ -41,6 +41,26 @@ setup() {
     write_file "${MOODLE_VOLUME_DIR}/theme/boost/config.php" "OLD-BOOST"
     write_file "${MOODLE_VOLUME_DIR}/theme/mytheme/config.php" "CUSTOM-THEME"
     write_file "${MOODLE_VOLUME_DIR}/index.php" "OLD-INDEX"
+
+    # Core files/plugins Moodle itself has since removed. Left on an old install, these are
+    # exactly what trips Moodle's own "Mixed Moodle versions detected" upgrade check, and (for
+    # qtype_random specifically) a bootstrap-time crash in core\component's classloader.
+    write_file "${MOODLE_VOLUME_DIR}/lib/cronlib.php" "STALE-CRONLIB"
+    write_file "${MOODLE_VOLUME_DIR}/question/type/random/version.php" "STALE-QTYPE-RANDOM"
+
+    # Mirror the real chart's permission model: the volume-permissions initContainer only
+    # chowns the moodle/ and moodledata/ subpaths of the persisted volume to the runtime
+    # user; BITNAMI_VOLUME_DIR ("/bitnami") itself is baked into the image, root-owned, and
+    # not writable by it. A regression that stages temp files directly under
+    # BITNAMI_VOLUME_DIR (as this function once did) must fail here exactly like it does
+    # in the cluster, instead of silently passing because everything sits under one
+    # uniformly-writable tmp dir.
+    chmod 555 "$BITNAMI_VOLUME_DIR"
+}
+
+teardown() {
+    # Restore write access so BATS can remove BATS_TEST_TMPDIR after the test.
+    chmod 755 "$BITNAMI_VOLUME_DIR" 2>/dev/null || true
 }
 
 write_file() {
@@ -135,6 +155,16 @@ file_is() {
     file_is "${MOODLE_VOLUME_DIR}/public/admin/index.php" "ADMIN-CHANGED-AFTER-FIRST-MIGRATION"
     run bash -c "ls '${MOODLE_DATA_DIR}'/moodle-pre-public-migration-*.tar.gz | wc -l"
     [ "$output" -eq 1 ]
+}
+
+@test "removes a core file Moodle itself has since removed, instead of carrying it forward" {
+    moodle_migrate_to_public_layout
+    [ ! -e "${MOODLE_VOLUME_DIR}/public/lib/cronlib.php" ]
+}
+
+@test "removes a whole plugin Moodle itself has since removed (qtype_random)" {
+    moodle_migrate_to_public_layout
+    [ ! -e "${MOODLE_VOLUME_DIR}/public/question/type/random" ]
 }
 
 @test "can be disabled via MOODLE_SKIP_PUBLIC_MIGRATION" {

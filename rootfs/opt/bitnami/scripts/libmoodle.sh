@@ -29,6 +29,143 @@ elif [[ -f /opt/bitnami/scripts/libpostgresql.sh ]]; then
     . /opt/bitnami/scripts/libpostgresql.sh
 fi
 
+# Paths (relative to the public/ document root) of files Moodle core itself has removed over the
+# years. Moodle's own admin/cli/upgrade.php refuses to run while any of these still exist ("Mixed
+# Moodle versions detected"), since preserving old-install content that isn't part of the fresh
+# image (see moodle_migrate_to_public_layout below) can leave exactly this kind of core leftover
+# behind. Copied verbatim from $someexamplesofremovedfiles in public/lib/upgradelib.php as shipped
+# in this image; refresh from that file when bumping MOODLE_VERSION across a major version.
+MOODLE_KNOWN_REMOVED_CORE_FILES=(
+    '/availability/renderer.php'
+    '/course/tests/behat/course_controls.feature'
+    '/lib/amd/src/addblockmodal.js'
+    '/question/qengine.js'
+    '/tag/classes/manage_table.php'
+    '/badges/classes/observer.php'
+    '/course/request_form.php'
+    '/course/templates/activitychooser.mustache'
+    '/lib/tests/xmlize_test.php'
+    '/message/templates/message_drawer_view_conversation_footer_unable_to_message.mustache'
+    '/admin/process_email.php'
+    '/badges/preferences_form.php'
+    '/lib/ajax/setuserpref.php'
+    '/lib/cronlib.php'
+    '/question/classes/local/bank/action_column_base.php'
+    '/backup/util/ui/classes/copy/copy.php'
+    '/backup/util/ui/yui/build/moodle-backup-backupselectall/moodle-backup-backupselectall.js'
+    '/cache/classes/interfaces.php'
+    '/cache/disabledlib.php'
+    '/cache/lib.php'
+    '/README.txt'
+    '/lib/dataformatlib.php'
+    '/lib/horde/readme_moodle.txt'
+    '/lib/yui/src/formchangechecker/js/formchangechecker.js'
+    '/mod/forum/pix/monologo.png'
+    '/question/tests/behat/behat_question.php'
+    '/badges/ajax.php'
+    '/course/editdefaultcompletion.php'
+    '/grade/amd/src/searchwidget/group.js'
+    '/lib/behat/extension/Moodle/BehatExtension/Locator/FilesystemSkipPassedListLocator.php'
+    '/lib/classes/task/legacy_plugin_cron_task.php'
+    '/mod/lti/ajax.php'
+    '/pix/f/archive.png'
+    '/user/repository.php'
+    '/admin/auth_config.php'
+    '/auth/yui/passwordunmask/passwordunmask.js'
+    '/lib/spout/readme_moodle.txt'
+    '/lib/yui/src/tooltip/js/tooltip.js'
+    '/mod/forum/classes/task/refresh_forum_post_counts.php'
+    '/user/amd/build/participantsfilter.min.js'
+    '/user/amd/src/participantsfilter.js'
+    '/admin/classes/task_log_table.php'
+    '/admin/cli/mysql_engine.php'
+    '/lib/babel-polyfill/polyfill.js'
+    '/lib/typo3/class.t3lib_cs.php'
+    '/question/tests/category_class_test.php'
+    '/customfield/edit.php'
+    '/lib/phpunit/classes/autoloader.php'
+    '/lib/xhprof/README'
+    '/message/defaultoutputs.php'
+    '/user/files_form.php'
+    '/grade/grading/classes/privacy/gradingform_provider.php'
+    '/lib/coursecatlib.php'
+    '/lib/form/htmleditor.php'
+    '/message/classes/output/messagearea/contact.php'
+    '/course/classes/output/modchooser_item.php'
+    '/course/yui/build/moodle-course-modchooser/moodle-course-modchooser-min.js'
+    '/course/yui/src/modchooser/js/modchooser.js'
+    '/h5p/classes/autoloader.php'
+    '/lib/adodb/readme.txt'
+    '/lib/maxmind/GeoIp2/Compat/JsonSerializable.php'
+    '/lib/amd/src/modal_confirm.js'
+    '/lib/fonts/font-awesome-4.7.0/css/font-awesome.css'
+    '/lib/jquery/jquery-3.2.1.min.js'
+    '/lib/recaptchalib.php'
+    '/lib/sessionkeepalive_ajax.php'
+    '/lib/yui/src/checknet/js/checknet.js'
+    '/question/amd/src/qbankmanager.js'
+    '/lib/form/yui/src/showadvanced/js/showadvanced.js'
+    '/lib/tests/output_external_test.php'
+    '/message/amd/src/message_area.js'
+    '/message/templates/message_area.mustache'
+    '/question/yui/src/qbankmanager/build.json'
+    '/lib/classes/session/memcache.php'
+    '/lib/eventslib.php'
+    '/lib/form/submitlink.php'
+    '/lib/medialib.php'
+    '/lib/password_compat/lib/password.php'
+    '/lib/dml/mssql_native_moodle_database.php'
+    '/lib/dml/mssql_native_moodle_recordset.php'
+    '/lib/dml/mssql_native_moodle_temptables.php'
+    '/auth/README.txt'
+    '/calendar/set.php'
+    '/enrol/users.php'
+    '/enrol/yui/rolemanager/assets/skins/sam/rolemanager.css'
+    '/badges/backpackconnect.php'
+    '/calendar/yui/src/info/assets/skins/sam/moodle-calendar-info.css'
+    '/competency/classes/external/exporter.php'
+    '/mod/forum/forum.js'
+    '/user/pixgroup.php'
+    '/calendar/preferences.php'
+    '/lib/alfresco/'
+    '/lib/jquery/jquery-1.12.1.min.js'
+    '/lib/password_compat/tests/'
+    '/lib/phpunit/classes/unittestcase.php'
+    '/lib/classes/log/sql_internal_reader.php'
+    '/lib/zend/'
+    '/mod/forum/pix/icon.gif'
+    '/tag/templates/tagname.mustache'
+    '/tag/coursetagslib.php'
+    '/lib/timezone.txt'
+    '/course/delete_category_form.php'
+    '/admin/tool/qeupgradehelper/version.php'
+    '/admin/block.php'
+    '/admin/oacleanup.php'
+    '/backup/lib.php'
+    '/backup/bb/README.txt'
+    '/lib/excel/test.php'
+    '/admin/tool/unittest/simpletestlib.php'
+    '/lib/minify/builder/'
+    '/lib/yui/3.4.1pr1/'
+    '/search/cron_php5.php'
+    '/course/report/log/indexlive.php'
+    '/admin/report/backups/index.php'
+    '/admin/generator.php'
+    '/lib/yui/2.8.0r4/'
+    '/blocks/admin/block_admin.php'
+    '/blocks/admin_tree/block_admin_tree.php'
+)
+
+# Directories (relative to public/) of whole plugins Moodle has removed from core. Unlike the file
+# list above (individual leftover files Moodle's own upgrade check refuses to run past), these are
+# plugins whose mere presence on disk can crash core bootstrap code that specifically checks for
+# and warns about them (e.g. qtype_random, removed some versions back: core\component's classloader
+# calls the not-yet-loaded global debugging() the first time it scans a plugin folder named this).
+# Hand-curated as we encounter them; add to this list rather than special-casing them elsewhere.
+MOODLE_KNOWN_REMOVED_PLUGIN_DIRS=(
+    '/question/type/random'
+)
+
 ########################
 # Migrate a persisted Moodle codebase predating the Moodle 5.1 "/public" document root split
 # Moodle 5.1 moved all web-accessible code under a new "public/" directory (keeping config.php and
@@ -41,8 +178,9 @@ fi
 #   MOODLE_BASE_DIR
 #   MOODLE_VOLUME_DIR
 #   MOODLE_DATA_DIR
-#   BITNAMI_VOLUME_DIR
 #   WEB_SERVER_DAEMON_USER
+#   MOODLE_KNOWN_REMOVED_CORE_FILES
+#   MOODLE_KNOWN_REMOVED_PLUGIN_DIRS
 # Arguments:
 #   None
 # Returns:
@@ -58,8 +196,11 @@ moodle_migrate_to_public_layout() {
     info "Backing up the pre-migration codebase to ${backup_file}"
     tar -C "$(dirname "$MOODLE_VOLUME_DIR")" -czf "$backup_file" "$(basename "$MOODLE_VOLUME_DIR")"
 
-    local -r staging_dir="${BITNAMI_VOLUME_DIR}/.moodle-public-migration"
-    local -r fresh_public_dir="${BITNAMI_VOLUME_DIR}/.moodle-public-migration-fresh-public"
+    # Staged under MOODLE_DATA_DIR (not BITNAMI_VOLUME_DIR/"/bitnami" itself): only the
+    # moodle/ and moodledata/ subPaths of the PVC are chowned to the runtime user by the
+    # volume-permissions initContainer, so "/bitnami" itself is root-owned and not writable here.
+    local -r staging_dir="${MOODLE_DATA_DIR}/.moodle-public-migration"
+    local -r fresh_public_dir="${MOODLE_DATA_DIR}/.moodle-public-migration-fresh-public"
     rm -rf "$staging_dir" "$fresh_public_dir"
     # Start from a pristine copy of the code shipped with this image (already split correctly)
     cp -a "${MOODLE_BASE_DIR}/." "$staging_dir/"
@@ -88,10 +229,25 @@ moodle_migrate_to_public_layout() {
     cp -a "${fresh_public_dir}/." "$staging_dir/public/"
     rm -rf "$fresh_public_dir"
 
+    # The steps above preserve *any* old-install content the fresh overlay doesn't overwrite by
+    # name, which includes core files/plugins Moodle itself has since removed. Clean those out
+    # explicitly, matching what Moodle's own upgrade check (and this bootstrap-time plugin scan)
+    # require rather than merely recommend. See the arrays' own comments above this function.
+    for removed_file in "${MOODLE_KNOWN_REMOVED_CORE_FILES[@]}"; do
+        [[ -e "${staging_dir}/public${removed_file}" ]] && rm -rf "${staging_dir}/public${removed_file}"
+    done
+    for removed_dir in "${MOODLE_KNOWN_REMOVED_PLUGIN_DIRS[@]}"; do
+        [[ -e "${staging_dir}/public${removed_dir}" ]] && rm -rf "${staging_dir}/public${removed_dir}"
+    done
+
     am_i_root && configure_permissions_ownership "$staging_dir" -d "775" -f "664" -u "$WEB_SERVER_DAEMON_USER" -g "root"
 
     find "${MOODLE_VOLUME_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} \;
-    cp -a "${staging_dir}/." "${MOODLE_VOLUME_DIR}/"
+    # --no-preserve=timestamps: MOODLE_VOLUME_DIR is a pre-existing CSI subPath mount, not a
+    # directory this process created, so "cp -a" trying to utime() the destination directory
+    # itself (its final post-order step for "srcdir/.") can be refused even though writing its
+    # contents just above succeeded. File timestamps carry no functional meaning for Moodle.
+    cp -a --no-preserve=timestamps "${staging_dir}/." "${MOODLE_VOLUME_DIR}/"
     rm -rf "$staging_dir"
 
     info "Finished migrating the persisted Moodle codebase to the /public layout"
