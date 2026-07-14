@@ -32,9 +32,9 @@ keywords:
 - learning
 - php
 maintainers:
-- name: Broadcom, Inc. All Rights Reserved.
-  url: https://github.com/bitnami/charts
+- name: Martin Reinhardt
+  url: https://m13t.de
 name: moodle
 sources:
 - https://github.com/bitnami/charts/tree/main/bitnami/moodle
-version: 0.1.0
+version: 1.0.0
