@@ -11,7 +11,7 @@ annotations:
   tanzuCategory: application
 apiVersion: v2
 # renovate: datasource=github-tags depName=moodle/moodle
-appVersion: 5.0.2
+appVersion: 5.2.1
 dependencies:
 - condition: mariadb.enabled
   name: mariadb
@@ -37,4 +37,4 @@ maintainers:
 name: moodle
 sources:
 - https://github.com/bitnami/charts/tree/main/bitnami/moodle
-version: 1.0.0
+version: 1.0.1
