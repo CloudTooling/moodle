@@ -13,7 +13,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    env: 
+    env:
       DOCKERFILE: ./Dockerfile
       DOCKER_IMAGE_NAME: cloudtooling/moodle
     permissions:
