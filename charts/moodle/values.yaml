@@ -70,7 +70,7 @@ usePasswordFiles: true
 image:
   registry: docker.io
   repository: cloudtooling/moodle
-  tag: "5.2.1"
+  tag: "5.0.2"
   digest: ""
   ## Specify a imagePullPolicy
   ## ref: https://kubernetes.io/docs/concepts/containers/images/#pre-pulled-images
