@@ -1,6 +1,6 @@
 # moodle
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![AppVersion: 5.0.2](https://img.shields.io/badge/AppVersion-5.0.2-informational?style=flat-square)
+![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-informational?style=flat-square) ![AppVersion: 5.0.2](https://img.shields.io/badge/AppVersion-5.0.2-informational?style=flat-square)
 
 Moodle(TM) LMS is an open source online Learning Management System widely used at universities, schools, and corporations. It is modular and highly adaptable to any type of online learning.
 
@@ -10,7 +10,7 @@ Moodle(TM) LMS is an open source online Learning Management System widely used a
 
 | Name | Email | Url |
 | ---- | ------ | --- |
-| Broadcom, Inc. All Rights Reserved. |  | <https://github.com/bitnami/charts> |
+| Martin Reinhardt |  | <https://m13t.de> |
 
 ## Source Code
 
@@ -101,7 +101,7 @@ Moodle(TM) LMS is an open source online Learning Management System widely used a
 | image.pullSecrets | list | `[]` |  |
 | image.registry | string | `"docker.io"` |  |
 | image.repository | string | `"cloudtooling/moodle"` |  |
-| image.tag | string | `"5.0.2"` |  |
+| image.tag | string | `"5.2.1"` |  |
 | ingress.annotations | object | `{}` |  |
 | ingress.apiVersion | string | `""` |  |
 | ingress.enabled | bool | `false` |  |
@@ -194,7 +194,7 @@ Moodle(TM) LMS is an open source online Learning Management System widely used a
 | podLabels | object | `{}` |  |
 | podSecurityContext.enabled | bool | `true` |  |
 | podSecurityContext.fsGroup | int | `1001` |  |
-| podSecurityContext.fsGroupChangePolicy | string | `"Always"` |  |
+| podSecurityContext.fsGroupChangePolicy | string | `"OnRootMismatch"` |  |
 | podSecurityContext.supplementalGroups | list | `[]` |  |
 | podSecurityContext.sysctls | list | `[]` |  |
 | priorityClassName | string | `""` |  |
@@ -233,8 +233,8 @@ Moodle(TM) LMS is an open source online Learning Management System widely used a
 | smtpPort | string | `""` |  |
 | smtpProtocol | string | `""` |  |
 | smtpUser | string | `""` |  |
-| startupProbe.enabled | bool | `false` |  |
-| startupProbe.failureThreshold | int | `60` |  |
+| startupProbe.enabled | bool | `true` |  |
+| startupProbe.failureThreshold | int | `180` |  |
 | startupProbe.initialDelaySeconds | int | `30` |  |
 | startupProbe.path | string | `"/login/index.php"` |  |
 | startupProbe.periodSeconds | int | `10` |  |

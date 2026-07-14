@@ -70,7 +70,7 @@ usePasswordFiles: true
 image:
   registry: docker.io
   repository: cloudtooling/moodle
-  tag: "5.0.2"
+  tag: "5.2.1"
   digest: ""
   ## Specify a imagePullPolicy
   ## ref: https://kubernetes.io/docs/concepts/containers/images/#pre-pulled-images
@@ -366,7 +366,10 @@ resources: {}
 ##
 podSecurityContext:
   enabled: true
-  fsGroupChangePolicy: Always
+  # Avoid a full recursive chown of the moodledata PVC on every pod (re)start;
+  # only fix ownership if the volume root doesn't already match fsGroup.
+  # https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#configure-volume-permission-and-ownership-change-policy-for-pods
+  fsGroupChangePolicy: OnRootMismatch
   sysctls: []
   supplementalGroups: []
   fsGroup: 1001
