@@ -2,6 +2,7 @@
 
 Moodle Docker Image &amp; Helm Chart. Based on Bitnami Charts and Images
 
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/moodle)](https://artifacthub.io/packages/helm/moodle/moodle)
 [![Docker Stars](https://img.shields.io/docker/pulls/cloudtooling/moodle)](https://hub.docker.com/r/cloudtooling/moodle/)
 [![Docker Stars](https://img.shields.io/docker/stars/cloudtooling/moodle.svg)](https://hub.docker.com/r/cloudtooling/moodle/)
 
@@ -30,7 +31,7 @@ minimal local run against real MariaDB (`docker compose up`).
 from CI — consume it directly from a checkout of this repo until that's wired up:
 
 ```console
-helm install my-release ./charts/moodle \
+helm install my-release cloudtooling/moodle:0.1. \
   --set image.tag=5.2.1 \
   --set moodleUsername=admin \
   --set moodlePassword=<password> \
