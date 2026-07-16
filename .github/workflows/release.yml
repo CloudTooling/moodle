@@ -181,6 +181,7 @@ jobs:
             fi
             helm push "${pkg}" oci://ghcr.io/cloudtooling/helm-charts
           done
+          rm *.tgz
       - name: Trigger changes
         run: |
           RELEASE_VERSION="${{ github.event.inputs.releaseversion }}"
