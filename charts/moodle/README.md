@@ -1,10 +1,10 @@
 # moodle
 
-![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-informational?style=flat-square) ![AppVersion: 5.0.2](https://img.shields.io/badge/AppVersion-5.0.2-informational?style=flat-square)
+![Version: 1.0.1](https://img.shields.io/badge/Version-1.0.1-informational?style=flat-square) ![AppVersion: 5.0.2](https://img.shields.io/badge/AppVersion-5.0.2-informational?style=flat-square)
 
 Moodle(TM) LMS is an open source online Learning Management System widely used at universities, schools, and corporations. It is modular and highly adaptable to any type of online learning.
 
-**Homepage:** <https://bitnami.com>
+**Homepage:** <https://github.com/CloudTooling>
 
 ## Maintainers
 
@@ -14,7 +14,7 @@ Moodle(TM) LMS is an open source online Learning Management System widely used a
 
 ## Source Code
 
-* <https://github.com/bitnami/charts/tree/main/bitnami/moodle>
+* <https://github.com/CloudTooling/moodle>
 
 ## Requirements
 
@@ -53,7 +53,7 @@ Moodle(TM) LMS is an open source online Learning Management System widely used a
 | certificates.image.pullSecrets | list | `[]` |  |
 | certificates.image.registry | string | `"docker.io"` |  |
 | certificates.image.repository | string | `"bitnami/os-shell"` |  |
-| certificates.image.tag | string | `"12-debian-12-r50"` |  |
+| certificates.image.tag | string | `"latest"` |  |
 | command | list | `[]` |  |
 | commonAnnotations | object | `{}` |  |
 | commonLabels | object | `{}` |  |
@@ -130,6 +130,7 @@ Moodle(TM) LMS is an open source online Learning Management System widely used a
 | mariadb.auth.rootPassword | string | `""` |  |
 | mariadb.auth.username | string | `"bn_moodle"` |  |
 | mariadb.enabled | bool | `true` |  |
+| mariadb.image.tag | string | `"latest"` |  |
 | mariadb.primary.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
 | mariadb.primary.persistence.enabled | bool | `true` |  |
 | mariadb.primary.persistence.existingClaim | string | `""` |  |
@@ -144,7 +145,7 @@ Moodle(TM) LMS is an open source online Learning Management System widely used a
 | metrics.image.pullSecrets | list | `[]` |  |
 | metrics.image.registry | string | `"docker.io"` |  |
 | metrics.image.repository | string | `"bitnami/apache-exporter"` |  |
-| metrics.image.tag | string | `"1.0.10-debian-12-r55"` |  |
+| metrics.image.tag | string | `"latest"` |  |
 | metrics.podAnnotations."prometheus.io/port" | string | `"{{ .Values.metrics.service.port }}"` |  |
 | metrics.podAnnotations."prometheus.io/scrape" | string | `"true"` |  |
 | metrics.resources | object | `{}` |  |
@@ -250,7 +251,7 @@ Moodle(TM) LMS is an open source online Learning Management System widely used a
 | volumePermissions.image.pullSecrets | list | `[]` |  |
 | volumePermissions.image.registry | string | `"docker.io"` |  |
 | volumePermissions.image.repository | string | `"bitnami/os-shell"` |  |
-| volumePermissions.image.tag | string | `"12-debian-12-r50"` |  |
+| volumePermissions.image.tag | string | `"latest"` |  |
 | volumePermissions.resources | object | `{}` |  |
 | volumePermissions.resourcesPreset | string | `"nano"` |  |
 
