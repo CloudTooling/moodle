@@ -55,6 +55,25 @@ jobs:
       - name: Run legacy-install upgrade regression test
         run: ./tests/e2e-legacy-upgrade.sh moodle-e2e-test:${{ github.run_id }}
 
+  Chart-Images:
+    name: Verify chart image references
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+
+      - name: Verify all referenced images exist
+        run: |
+          ./tests/verify-chart-images.sh charts/moodle \
+            mariadb.enabled=true \
+            metrics.enabled=true \
+            volumePermissions.enabled=true
+
   Container:
     name: Build Container Image
     runs-on: ubuntu-latest
@@ -145,6 +164,7 @@ jobs:
     needs:
       - Bats
       - E2E
+      - Chart-Images
       - Container
     steps:
       - run: exit 1
