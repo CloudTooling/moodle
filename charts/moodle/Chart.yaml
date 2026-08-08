@@ -13,7 +13,7 @@ annotations:
   tanzuCategory: application
 apiVersion: v2
 # renovate: datasource=github-tags depName=moodle/moodle
-appVersion: 5.0.2
+appVersion: 5.2.2
 dependencies:
 - condition: mariadb.enabled
   name: mariadb
