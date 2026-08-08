@@ -182,6 +182,20 @@ jobs:
             helm push "${pkg}" oci://ghcr.io/cloudtooling/helm-charts
           done
           rm *.tgz
+
+      - name: Generate Changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag v${{ inputs.releaseversion }} --prepend CHANGELOG.md --unreleased
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Add Changelog
+        run: |
+          git add CHANGELOG.md
+          git diff --staged --quiet || git commit -m "chore(release): update changelog for v${{ inputs.releaseversion }}"
+
       - name: Trigger changes
         run: |
           RELEASE_VERSION="${{ github.event.inputs.releaseversion }}"
@@ -192,15 +206,12 @@ jobs:
           git push --tags
           git push
 
-      - name: Conventional Changelog Action
-        uses: TriPSs/conventional-changelog-action@v6
+      - name: Create GH release
+        uses: softprops/action-gh-release@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          input-file: CHANGELOG.md
-          github-token: ${{ steps.app-token.outputs.token }}
-          version-file: config.json
-          pre-release: true
-          create-summary: true
-          skip-bump: true
-          skip-tag: true
-          skip-on-empty: true
-          tag-prefix: 'v'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: ${{ github.event.inputs.releaseversion }}
+          tag_name: v${{ github.event.inputs.releaseversion }}
+          draft: true
