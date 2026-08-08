@@ -16,6 +16,11 @@
 #   - every image listed in the chart's own Chart.yaml `annotations.images` catalog metadata
 #
 # Usage: tests/verify-chart-images.sh <chart-dir> [helm --set key=value ...]
+#
+# Env:
+#   EXCLUDE_IMAGES - extended regex of image refs to skip, e.g. the chart's own
+#                     image, which is built/pushed by a separate CI job that
+#                     isn't guaranteed to have run yet.
 
 set -euo pipefail
 
@@ -52,6 +57,10 @@ failed=0
 while IFS= read -r image; do
   [ -z "$image" ] && continue
   printf 'Checking %s ... ' "$image"
+  if [ -n "${EXCLUDE_IMAGES:-}" ] && [[ "$image" =~ $EXCLUDE_IMAGES ]]; then
+    echo "SKIPPED (excluded)"
+    continue
+  fi
   if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
     echo "OK"
   else

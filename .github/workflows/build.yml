@@ -5,6 +5,7 @@ permissions: {}
 on:
   pull_request:
   merge_group:
+  workflow_dispatch:
   push:
     branches:
       - develop
@@ -68,6 +69,8 @@ jobs:
         uses: azure/setup-helm@v5
 
       - name: Verify all referenced images exist
+        env:
+          EXCLUDE_IMAGES: '^docker\.io/cloudtooling/moodle:'
         run: |
           ./tests/verify-chart-images.sh charts/moodle \
             mariadb.enabled=true \
