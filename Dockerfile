@@ -42,11 +42,11 @@ RUN --mount=type=secret,id=downloads_url,env=SECRET_DOWNLOADS_URL \
       if [ ! -f "${COMPONENT}.tar.gz" ]; then \
         curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz" -O ; \
       fi ; \
-      sha256sum -c "/opt/bitnami/checksums/${COMPONENT}.tar.gz.sha256" ; \
+      curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz.sha256" -O ; \
+      sha256sum -c "${COMPONENT}.tar.gz.sha256" ; \
       tar -zxf "${COMPONENT}.tar.gz" -C /opt/bitnami --strip-components=2 --no-same-owner ; \
-      rm -rf "${COMPONENT}".tar.gz ; \
-    done ; \
-    rm -rf /opt/bitnami/checksums ;
+      rm -rf "${COMPONENT}.tar.gz" "${COMPONENT}.tar.gz.sha256" ; \
+    done ;
 RUN apt-get update && apt-get upgrade -y && \
     apt-get clean && rm -rf /var/lib/apt/lists /var/cache/apt/archives
 RUN find / -perm /6000 -type f -exec chmod a-s {} \; || true
