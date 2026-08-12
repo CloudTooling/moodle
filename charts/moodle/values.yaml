@@ -70,6 +70,7 @@ usePasswordFiles: true
 image:
   registry: docker.io
   repository: cloudtooling/moodle
+# renovate: datasource=github-tags depName=moodle/moodle
   tag: "5.2.2"
   digest: ""
   ## Specify a imagePullPolicy
