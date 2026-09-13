@@ -71,7 +71,7 @@ image:
   registry: docker.io
   repository: cloudtooling/moodle
 # renovate: datasource=github-tags depName=moodle/moodle
-  tag: "5.2.3"
+  tag: "5.2.2"
   digest: ""
   ## Specify a imagePullPolicy
   ## ref: https://kubernetes.io/docs/concepts/containers/images/#pre-pulled-images
