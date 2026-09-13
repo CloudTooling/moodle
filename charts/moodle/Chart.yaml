@@ -39,4 +39,4 @@ maintainers:
 name: moodle
 sources:
 - https://github.com/CloudTooling/moodle
-version: 1.0.2
+version: 1.0.3
