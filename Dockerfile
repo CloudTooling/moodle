@@ -36,7 +36,8 @@ RUN --mount=type=secret,id=downloads_url,env=SECRET_DOWNLOADS_URL \
       "postgresql-client-14.23.0-0-linux-${OS_ARCH}-debian-12" \
       "mysql-client-12.3.2-1-linux-${OS_ARCH}-debian-12" \
       "libphp-8.4.22-1-linux-${OS_ARCH}-debian-12" \
-      "moodle-${MOODLE_VERSION}-0-linux-${OS_ARCH}-debian-12" \
+      # NOTE: "moodle-${MOODLE_VERSION}-0-linux-${OS_ARCH}-debian-12" intentionally omitted here, \
+      # see the TEMPORARY OVERRIDE block below. \
     ) ; \
     for COMPONENT in "${COMPONENTS[@]}"; do \
       if [ ! -f "${COMPONENT}.tar.gz" ]; then \
@@ -47,6 +48,25 @@ RUN --mount=type=secret,id=downloads_url,env=SECRET_DOWNLOADS_URL \
       tar -zxf "${COMPONENT}.tar.gz" -C /opt/bitnami --strip-components=2 --no-same-owner ; \
       rm -rf "${COMPONENT}.tar.gz" "${COMPONENT}.tar.gz.sha256" ; \
     done ;
+# TEMPORARY OVERRIDE: Bitnami has not published a "moodle-${MOODLE_VERSION}" stacksmith
+# package yet (only up to 5.2.2 as of 2026-09-13), so build the Moodle payload ourselves
+# from the official upstream release + composer, mirroring what Bitnami's package normally
+# provides (upstream release tree extracted to /opt/bitnami/moodle, with vendor/ installed
+# via composer). Once Bitnami publishes a real "moodle-${MOODLE_VERSION}-0-..." package,
+# delete this RUN step and restore the COMPONENTS entry commented out above.
+# download.moodle.org sits behind Cloudflare bot protection that consistently 403s requests
+# from GitHub Actions' (and other datacenter) IP ranges, so pull the source straight from the
+# moodle/moodle GitHub tag instead (verified byte-for-byte equivalent to the moodle.org release
+# tarball, save for a git-only .gitignore and an informational, unused githash.php).
+# curl retries + a browser User-Agent below guard against getcomposer.org's occasional hiccups.
+RUN MOODLE_BUILD_CURL_OPTS=(--fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 5 -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36") ; \
+    mkdir -p /tmp/moodle-build /opt/bitnami/moodle ; cd /tmp/moodle-build ; \
+    curl "${MOODLE_BUILD_CURL_OPTS[@]}" "https://github.com/moodle/moodle/archive/refs/tags/v${MOODLE_VERSION}.tar.gz" -o moodle.tar.gz ; \
+    tar -zxf moodle.tar.gz -C /opt/bitnami/moodle --strip-components=1 ; \
+    curl "${MOODLE_BUILD_CURL_OPTS[@]}" https://getcomposer.org/installer -o composer-setup.php ; \
+    /opt/bitnami/php/bin/php composer-setup.php --quiet ; \
+    /opt/bitnami/php/bin/php composer.phar install --no-dev --optimize-autoloader --no-interaction --working-dir=/opt/bitnami/moodle ; \
+    cd / ; rm -rf /tmp/moodle-build ;
 RUN apt-get update && apt-get upgrade -y && \
     apt-get clean && rm -rf /var/lib/apt/lists /var/cache/apt/archives
 RUN find / -perm /6000 -type f -exec chmod a-s {} \; || true
