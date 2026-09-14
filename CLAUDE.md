@@ -50,7 +50,33 @@ Covered by `tests/migrate_public_layout.bats` (shell-level, 16 cases) and
 below only reproduce via actual PHP execution, not shell-level testing). Both run in CI
 (`.github/workflows/build.yml`, jobs `Bats` and `E2E`).
 
+## Core refresh on every ordinary version bump
+
+The `/public` migration above only fires once per volume, guarded by `public/` not existing
+yet — it's a one-time structural bridge, not a general upgrade mechanism. Bitnami's own
+`restore_persisted_app()` (`prebuildfs/opt/bitnami/scripts/libpersistence.sh`) otherwise just
+symlinks back whatever codebase was captured at a volume's *first* boot, forever — so before
+this, bumping `MOODLE_VERSION` in the image (5.2.1 → 5.2.2 → 5.2.3, say) had **zero effect**
+on any already-running deployment: the site kept serving the original install's version
+indefinitely, no matter how many new images shipped (found via a real deployment stuck showing
+a `Build:` timestamp from months earlier despite repeated image bumps).
+
+`moodle_refresh_core_on_version_change()` in `libmoodle.sh` closes that gap: it runs on every
+boot of an already-initialized volume (right after the `/public` migration, so it can assume
+`public/` already exists), compares the persisted codebase's `public/version.php` `$version`
+stamp against the image's, and — on any mismatch, not just a major-version jump — reruns the
+same backup-then-merge as the `/public` migration (full copy of the persisted tree, fresh
+image's `public/` overlaid on top, known-removed files/plugins stripped). The root-level files
+outside `public/` (`admin/cli/*`, the handful of `lib/` bootstrap files) are exclusively
+core-owned — nothing user-customizable is ever placed there — so those are fully replaced
+rather than merged. Skippable via `MOODLE_SKIP_CORE_REFRESH=yes`. Covered by
+`tests/refresh_core_on_version_change.bats` (shell-level, 15 cases).
+
 ## Hard-won gotchas (all found via a real production incident, July 2026)
+
+These predate the core-refresh mechanism above (found while building the `/public` migration)
+but apply equally to both, since `moodle_refresh_core_on_version_change()` reuses the same
+staging/backup/swap approach.
 
 **1. `/bitnami` itself is not writable by the runtime user — only `moodle/` and
 `moodledata/` are.** The chart's `volume-permissions` initContainer only chowns those two

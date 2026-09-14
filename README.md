@@ -43,18 +43,29 @@ See [`charts/moodle/values.yaml`](charts/moodle/values.yaml) for the full parame
 (it's a fork of Bitnami's chart, so upstream's
 [parameter docs](charts/moodle/README.md) mostly still apply).
 
-## Upgrading a persisted install across the Moodle 5.1 `/public` boundary
+## Upgrading a persisted install
 
-The first boot against a volume from before Moodle 5.1 triggers a one-time migration to the
-new `/public` document root layout (`moodle_migrate_to_public_layout` in
-`rootfs/opt/bitnami/scripts/libmoodle.sh`, see [`CLAUDE.md`](CLAUDE.md) for the full story).
-It backs up the old codebase to a tarball in `moodledata`, merges it with the fresh image's
-`public/` tree, and — as of this fork — automatically strips out core files and plugins
-Moodle itself has since removed (the `qtype_random`-class crash and "Mixed Moodle versions
-detected" upgrade-abort both come from exactly this kind of leftover, and are now handled for
-you). That merge, plus the real `admin/cli/upgrade.php` run that follows it, can take
-noticeably longer than a normal restart, especially on an install that's several Moodle
-versions behind.
+Bitnami-style images normally freeze a persisted install's codebase forever after its first
+boot (`restore_persisted_app` just symlinks back whatever was captured then) — bumping
+`MOODLE_VERSION` in the image would otherwise have zero effect on any already-running
+deployment. This fork refreshes the persisted codebase on every boot where it differs from
+the image, in two layers (`rootfs/opt/bitnami/scripts/libmoodle.sh`, see
+[`CLAUDE.md`](CLAUDE.md) for the full story):
+
+- `moodle_migrate_to_public_layout`: a one-time structural migration, triggered the first boot
+  against a volume from before Moodle 5.1, into the new `/public` document root layout.
+- `moodle_refresh_core_on_version_change`: runs on every boot after that, comparing the
+  persisted codebase's `version.php` against the image's; refreshes core code on any
+  mismatch — patch bumps included, not just major-version jumps. Disable with
+  `MOODLE_SKIP_CORE_REFRESH=yes`.
+
+Both back up the old codebase to a tarball in `moodledata` first, then merge it with the fresh
+image's `public/` tree (core files updated, anything only in the persisted install —
+customizations, third-party plugins — survives), and strip out core files and plugins Moodle
+itself has since removed (the `qtype_random`-class crash and "Mixed Moodle versions detected"
+upgrade-abort both come from exactly this kind of leftover, and are now handled for you). That
+merge, plus the real `admin/cli/upgrade.php` run that follows it, can take noticeably longer
+than a normal restart, especially on an install that's several Moodle versions behind.
 
 The chart's `startupProbe` (enabled by default, generous `failureThreshold`) exists
 specifically to give this first boot room without needing to touch `livenessProbe` —

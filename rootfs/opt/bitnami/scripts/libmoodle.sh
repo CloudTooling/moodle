@@ -254,6 +254,94 @@ moodle_migrate_to_public_layout() {
 }
 
 ########################
+# Get the numeric $version stamp out of a Moodle version.php file
+# Arguments:
+#   $1 - path to a version.php file
+# Returns:
+#   The $version value (e.g. "2025100700.01"), or nothing if the file doesn't exist/match
+#########################
+moodle_version_from_file() {
+    local -r version_file="${1:?missing version file}"
+    [[ -f "$version_file" ]] || return 0
+    grep -E '^\s*\$version\s*=' "$version_file" | head -n1 | sed -E 's/^[^=]*=\s*([0-9]+(\.[0-9]+)?)\s*;.*/\1/'
+}
+
+########################
+# Refresh a persisted Moodle codebase's core code when it's a different Moodle version than the
+# one shipped in this image. Bitnami-style images normally freeze the persisted codebase forever
+# once a volume is initialized (restore_persisted_app in libpersistence.sh just symlinks back
+# whatever was captured at first boot) - without this, bumping MOODLE_VERSION in the image has
+# zero effect on any already-running deployment, no matter how many patch releases it ships.
+# This is the same "keep config.php + custom plugins, take fresh core code" merge as
+# moodle_migrate_to_public_layout above, minus the flat-layout relocation dance that function
+# needs - by the time this runs, the persisted volume is guaranteed to already have a public/
+# (either it always did, or moodle_migrate_to_public_layout just gave it one).
+# Globals:
+#   MOODLE_BASE_DIR
+#   MOODLE_VOLUME_DIR
+#   MOODLE_DATA_DIR
+#   WEB_SERVER_DAEMON_USER
+#   MOODLE_KNOWN_REMOVED_CORE_FILES
+#   MOODLE_KNOWN_REMOVED_PLUGIN_DIRS
+# Arguments:
+#   None
+# Returns:
+#   None
+#########################
+moodle_refresh_core_on_version_change() {
+    ! is_boolean_yes "${MOODLE_SKIP_CORE_REFRESH:-no}" || return 0
+    [[ -f "${MOODLE_BASE_DIR}/public/version.php" ]] || return 0
+
+    local -r persisted_version="$(moodle_version_from_file "${MOODLE_VOLUME_DIR}/public/version.php")"
+    local -r fresh_version="$(moodle_version_from_file "${MOODLE_BASE_DIR}/public/version.php")"
+    [[ -n "$persisted_version" && -n "$fresh_version" && "$persisted_version" != "$fresh_version" ]] || return 0
+
+    info "Persisted Moodle codebase (${persisted_version}) differs from the shipped image (${fresh_version}), refreshing core code"
+
+    local -r backup_file="${MOODLE_DATA_DIR}/moodle-pre-core-refresh-$(date +%Y%m%d%H%M%S).tar.gz"
+    info "Backing up the pre-refresh codebase to ${backup_file}"
+    tar -C "$(dirname "$MOODLE_VOLUME_DIR")" -czf "$backup_file" "$(basename "$MOODLE_VOLUME_DIR")"
+
+    # Staged under MOODLE_DATA_DIR, not BITNAMI_VOLUME_DIR directly - see gotcha #1 in CLAUDE.md.
+    local -r staging_dir="${MOODLE_DATA_DIR}/.moodle-core-refresh"
+    rm -rf "$staging_dir"
+    # Start from the persisted codebase: preserves config.php, custom plugins/themes, and any
+    # other old-install content by default.
+    cp -a "${MOODLE_VOLUME_DIR}/." "$staging_dir/"
+    # Overlay the fresh image's public/ tree on top: core files get updated, anything found only
+    # in the persisted install (customizations, third-party plugins) is left as copied above.
+    cp -a "${MOODLE_BASE_DIR}/public/." "$staging_dir/public/"
+    # The root-level files outside public/ (CLI entrypoints plus the handful of lib bootstrap
+    # files needed before public/'s autoloader is up) are exclusively core-owned - nothing
+    # user-customizable is ever placed there - so fully replace them rather than merge.
+    rm -rf "${staging_dir}/admin/cli"
+    cp -a "${MOODLE_BASE_DIR}/admin/cli" "${staging_dir}/admin/cli"
+    for lib_file in setup.php behat js components.json plugins.json thirdpartylibs.xml; do
+        rm -rf "${staging_dir}/lib/${lib_file}"
+        [[ -e "${MOODLE_BASE_DIR}/lib/${lib_file}" ]] && cp -a "${MOODLE_BASE_DIR}/lib/${lib_file}" "${staging_dir}/lib/${lib_file}"
+    done
+
+    # As with the /public migration above, the overlay preserves any old-install content the
+    # fresh copy doesn't overwrite by name - including core files/plugins Moodle itself has
+    # removed between the two versions. Clean those out explicitly.
+    for removed_file in "${MOODLE_KNOWN_REMOVED_CORE_FILES[@]}"; do
+        [[ -e "${staging_dir}/public${removed_file}" ]] && rm -rf "${staging_dir}/public${removed_file}"
+    done
+    for removed_dir in "${MOODLE_KNOWN_REMOVED_PLUGIN_DIRS[@]}"; do
+        [[ -e "${staging_dir}/public${removed_dir}" ]] && rm -rf "${staging_dir}/public${removed_dir}"
+    done
+
+    am_i_root && configure_permissions_ownership "$staging_dir" -d "775" -f "664" -u "$WEB_SERVER_DAEMON_USER" -g "root"
+
+    find "${MOODLE_VOLUME_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} \;
+    # --no-preserve=timestamps: see gotcha #2 in CLAUDE.md.
+    cp -a --no-preserve=timestamps "${staging_dir}/." "${MOODLE_VOLUME_DIR}/"
+    rm -rf "$staging_dir"
+
+    info "Finished refreshing the persisted Moodle codebase to ${fresh_version}"
+}
+
+########################
 # Validate settings in MOODLE_* env vars
 # Globals:
 #   MOODLE_*
@@ -422,6 +510,7 @@ EOF
         persist_app "$app_name" "$MOODLE_DATA_TO_PERSIST"
     else
         moodle_migrate_to_public_layout
+        moodle_refresh_core_on_version_change
 
         info "Restoring persisted Moodle installation"
         restore_persisted_app "$app_name" "$MOODLE_DATA_TO_PERSIST"
