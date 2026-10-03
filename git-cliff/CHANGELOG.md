@@ -1,23 +1,15 @@
 
-## [5.2.3](https://github.com/CloudTooling/moodle/compare/v5.2.2...v5.2.3) (2026-09-13)
+## [5.2.4](https://github.com/CloudTooling/moodle/compare/v5.2.3...v5.2.4) (2026-10-03)
 
 ### Bug Fixes
 
-* Patch moodle manual ([97448ef](https://github.com/CloudTooling/moodle/commit/97448ef93585ae6669b4cdedb677ba2c003a9279))
+* **Moodle:** Show correct version number ([fd53cc8](https://github.com/CloudTooling/moodle/commit/fd53cc8aae8360cd8c3adf6130cfb88329e816e5))
 
 
 
 ### Dependency Updates
 
-* **deps:** Update docker.io/cloudtooling/moodle docker tag to v5.2.2 ([40e3629](https://github.com/CloudTooling/moodle/commit/40e3629eaa687b027d79d3304c35a754092a9b3a))
-
-* **deps:** Update dependency moodle/moodle to v5.2.3 ([13cc454](https://github.com/CloudTooling/moodle/commit/13cc454b7eb9c72835a9c5469f83b6941f2fa238))
-
-
-
-### Refactoring
-
-* Fetch the checksum dynamically at build time instead of pinning it in git ([9ec166f](https://github.com/CloudTooling/moodle/commit/9ec166fc240e74b8866d604122b5f83066c85177))
+* **deps:** Update dependency moodle/moodle to v5.2.4 ([ce85196](https://github.com/CloudTooling/moodle/commit/ce8519661c75c560b88dcdb4c88a1a2a5363a7ef))
 
 
 
