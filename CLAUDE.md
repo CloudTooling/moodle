@@ -114,7 +114,13 @@ different ways**, both automatically handled by the migration function's cleanup
      function. **Both lists are point-in-time snapshots — refresh them from the shipped
      image's own `public/lib/upgradelib.php` whenever bumping `MOODLE_VERSION` across a major
      version**, since they need to stay ahead of the actual sequence of Moodle releases this
-     fork jumps across.
+     fork jumps across. Since the 5.2 → 5.3 incident (October 2026: a Renovate bump didn't
+     refresh the list, so 5.2-only files like `lib/amd/src/url.js` survived the core refresh and
+     every boot crashed on "Mixed Moodle versions detected"), `moodle_known_removed_core_files()`
+     also parses `$someexamplesofremovedfiles` from the shipped `upgradelib.php` at runtime, and
+     `moodle_clean_stale_core_files()` strips these leftovers on **every** boot — not just when
+     the version stamp changes — so a volume already refreshed with an incomplete list heals
+     itself on the next image.
 
 **5. `livenessProbe` (a `tcpSocket` check on the HTTP port) can kill the pod mid-upgrade.**
 Apache doesn't bind its port until `admin/cli/upgrade.php` finishes, and a real multi-version
