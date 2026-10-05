@@ -115,6 +115,22 @@ autoscaling:
 ## ref: https://github.com/bitnami/containers/tree/main/bitnami/moodle#configuration
 ##
 moodleSkipInstall: false
+## @param plugins Third-party plugins to install/upgrade on every boot, before the Moodle upgrade runs
+## Pin each plugin to an exact release archive (.zip or .tar.gz). A plugin is only re-downloaded
+## when its url/sha256 change; the previous version is backed up to moodledata first. Removing an
+## entry does not uninstall the plugin - uninstall it via Site administration first.
+## Plugins installed via the admin UI instead are never upgraded by the image, and can block a
+## core upgrade once they're incompatible (see README "Third-party plugins").
+## e.g:
+## plugins:
+##   - component: mod_hvp
+##     url: https://moodle.org/plugins/download.php/12345/mod_hvp_moodle53_2026090100.zip
+##     sha256: "<sha256 of the archive>"
+##   - component: assignfeedback_example        # subplugin types need an explicit path
+##     url: https://example.com/assignfeedback_example.zip
+##     path: public/mod/assign/feedback/example
+##
+plugins: []
 ## @param moodleSiteName Site name
 ## ref: https://github.com/bitnami/containers/tree/main/bitnami/moodle#configuration
 ##

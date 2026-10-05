@@ -76,6 +76,19 @@ before `vendor/` was included heal themselves. Skippable via `MOODLE_SKIP_CORE_R
 Covered by `tests/refresh_core_on_version_change.bats` (shell-level) and
 `tests/e2e-version-upgrade.sh` (see Testing notes).
 
+## Declarative third-party plugins
+
+`moodle_install_plugins()` in `libmoodle.sh` installs the plugins pinned in `MOODLE_PLUGINS`
+(chart value `plugins`, rendered with `toJson`) into the code root before the upgrade runs: on
+the persisted volume right after the core refresh/cleanup, or into the image's code before
+`moodle_install` on a fresh install. The image has no `curl`/`unzip`/`jq`, so JSON parsing,
+download (PHP stream wrappers, so `file://` works in tests) and zip extraction go through PHP,
+and the bats image installs `php-cli php-zip` for that. Fields are passed from PHP to bash with
+`\x1f` as the separator, not `\t`: `read` collapses consecutive *whitespace* IFS characters, so
+an empty `sha256` would silently shift `path` into its place. Covered by
+`tests/install_plugins.bats`, and end-to-end by the pinned `local_e2eprobe` plugin in
+`tests/e2e-version-upgrade.sh`.
+
 ## Hard-won gotchas (all found via a real production incident, July 2026)
 
 These predate the core-refresh mechanism above (found while building the `/public` migration)
