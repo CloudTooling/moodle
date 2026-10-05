@@ -101,7 +101,7 @@ Moodle(TM) LMS is an open source online Learning Management System widely used a
 | image.pullSecrets | list | `[]` |  |
 | image.registry | string | `"docker.io"` |  |
 | image.repository | string | `"cloudtooling/moodle"` |  |
-| image.tag | string | `"5.3.0"` |  |
+| image.tag | string | `"5.3.0.1"` |  |
 | ingress.annotations | object | `{}` |  |
 | ingress.apiVersion | string | `""` |  |
 | ingress.enabled | bool | `false` |  |
