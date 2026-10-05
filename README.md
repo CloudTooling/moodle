@@ -76,6 +76,39 @@ even starts (the `VolumePermissionChangeInProgress` event) — set
 `podSecurityContext.fsGroupChangePolicy: OnRootMismatch` to skip that on every rollout after
 the first.
 
-If you're jumping across a version boundary this fork hasn't crossed before, refresh
-`MOODLE_KNOWN_REMOVED_CORE_FILES` and `MOODLE_KNOWN_REMOVED_PLUGIN_DIRS` in `libmoodle.sh`
-from the target version's own `public/lib/upgradelib.php` first — see `CLAUDE.md`.
+Root-level core content outside `public/` (`admin/cli`, `lib/` bootstrap files, `vendor/`,
+`composer.json`/`composer.lock`) is replaced wholesale on refresh, and a `composer.lock` that
+differs from the image's triggers a refresh too. The list of files Moodle has removed is read
+from the shipped image's own `public/lib/upgradelib.php` at runtime, and those leftovers are
+stripped on every boot, so crossing a new major version needs no manual list maintenance.
+
+### Third-party plugins
+
+Plugins you installed yourself (via the admin UI, or by copying them onto the volume) live in
+the persisted `public/` tree and survive every refresh **as-is**. The image can't upgrade them,
+because it can't know which plugin release is compatible with the new Moodle version. If a plugin
+isn't ready for the new core, the upgrade aborts and the pod crash-loops, e.g. on Moodle 5.3:
+
+```text
+The plugin mod_hvp is defective or outdated; sorry you cannot continue.
+Error code: detectedbrokenplugin
+```
+
+By then the core DB upgrade has usually completed, so **rolling the image back is not an
+option**. Fix forward instead:
+
+1. See the actual error: set `BITNAMI_DEBUG=true` (chart `extraEnvVars`, or
+   `kubectl set env deploy/moodle BITNAMI_DEBUG=true`). Without it, `admin/cli/upgrade.php`
+   output is swallowed and the log just stops at `Running database upgrade`.
+2. Scale the deployment to 0 and start a temporary pod using the same image, with the PVC
+   mounted at `/bitnami/moodle` (subPath `moodle`) and `/bitnami/moodledata` (subPath
+   `moodledata`), running as the same user (`1001`, group `0`), with `command: ["sleep", "3600"]`.
+3. Back up the plugin into moodledata, then replace
+   `/bitnami/moodle/public/<type>/<name>` with a release compatible with the new Moodle version.
+   Use the Moodle plugins directory zip, or a recursive git clone for plugins with submodules
+   such as `mod_hvp`; a GitHub source archive is missing them.
+4. Delete the temporary pod and scale back to 1. The plugin's own DB upgrade runs on boot.
+
+To avoid this, check each third-party plugin's supported Moodle versions before bumping the image
+across a major version, and upgrade plugins first where the new plugin release still supports
+the old core.

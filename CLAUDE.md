@@ -66,11 +66,15 @@ boot of an already-initialized volume (right after the `/public` migration, so i
 `public/` already exists), compares the persisted codebase's `public/version.php` `$version`
 stamp against the image's, and — on any mismatch, not just a major-version jump — reruns the
 same backup-then-merge as the `/public` migration (full copy of the persisted tree, fresh
-image's `public/` overlaid on top, known-removed files/plugins stripped). The root-level files
-outside `public/` (`admin/cli/*`, the handful of `lib/` bootstrap files) are exclusively
-core-owned — nothing user-customizable is ever placed there — so those are fully replaced
-rather than merged. Skippable via `MOODLE_SKIP_CORE_REFRESH=yes`. Covered by
-`tests/refresh_core_on_version_change.bats` (shell-level, 15 cases).
+image's `public/` overlaid on top, known-removed files/plugins stripped). Every root-level
+entry the image ships outside `public/` (`admin/cli/*`, the `lib/` bootstrap files, and the
+composer-managed `vendor/` + `composer.json`/`composer.lock`) is exclusively core-owned —
+nothing user-customizable is ever placed there — so each is fully replaced rather than merged;
+only root entries the image doesn't ship (`config.php`) survive from the volume. A differing
+`composer.lock` triggers the refresh even under a matching version stamp, so volumes refreshed
+before `vendor/` was included heal themselves. Skippable via `MOODLE_SKIP_CORE_REFRESH=yes`.
+Covered by `tests/refresh_core_on_version_change.bats` (shell-level) and
+`tests/e2e-version-upgrade.sh` (see Testing notes).
 
 ## Hard-won gotchas (all found via a real production incident, July 2026)
 
@@ -145,6 +149,16 @@ pre-5.1 layout for testing, exclude it explicitly rather than letting a generic 
 everything" step overwrite the real root config with the stub).
 
 ## Testing notes
+
+- `tests/e2e-version-upgrade.sh <image> [previous-image]` does a fresh install with the
+  previously *released* image (default: newest `v*` git tag whose version differs from the
+  Dockerfile's `MOODLE_VERSION`), then boots the image under test on the same volumes — the
+  exact path production takes on every bump. It is the only test that puts a real older
+  Moodle codebase on the volume; it would have caught both halves of the 5.2.4 → 5.3.0
+  incident (stale removed files, then stale `vendor/`). CI job `E2E-Upgrade` (needs
+  `fetch-depth: 0` for the tags).
+- In these scripts, never pipe `docker logs` into `grep -q` under `set -o pipefail`: `grep -q`
+  exits on the first match, `docker logs` dies of SIGPIPE, and the pipeline reports failure.
 
 - `tests/e2e-legacy-upgrade.sh` boots the image against real MariaDB, does a fresh install,
   then manually flattens the volume back to a simulated pre-5.1 legacy layout (inverse of the
