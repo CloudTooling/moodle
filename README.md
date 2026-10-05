@@ -112,3 +112,22 @@ option**. Fix forward instead:
 To avoid this, check each third-party plugin's supported Moodle versions before bumping the image
 across a major version, and upgrade plugins first where the new plugin release still supports
 the old core.
+
+## Releasing
+
+Run the **Create release** workflow (`.github/workflows/release.yml`, built on
+[`m13tLabs/gh-actions-templates`](https://github.com/m13tLabs/gh-actions-templates)'
+`docker-release.yml`) from `develop`:
+
+- `release_version`: the Moodle version, optionally with an image revision for
+  image-only fixes (e.g. `5.3.0.1`).
+- `chart_version` (optional): the Helm chart version. Empty patch-bumps the current
+  one; an explicit `X.Y.Z` must be higher than the current chart version.
+- `draft_release`: create the GitHub release as a draft (default).
+
+The release commit pins the chart to the image it publishes
+([`scripts/pin-release-version.sh`](scripts/pin-release-version.sh)): `image.tag`,
+`appVersion` and the `annotations.images` entry become the release version, and
+the chart README is regenerated with helm-docs. The chart is then pushed to
+`oci://ghcr.io/cloudtooling/helm-charts`. Don't bump these by hand or via Renovate;
+the chart must only ever point at an image a release has already published.
