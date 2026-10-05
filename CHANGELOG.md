@@ -1,4 +1,33 @@
 
+## [5.3.0.2](https://github.com/CloudTooling/moodle/compare/v5.3.0.1...v5.3.0.2) (2026-10-05)
+
+### Bug Fixes
+
+* **Test:** Skip image-revision tags of the current Moodle version in upgrade e2e ([b61edd5](https://github.com/CloudTooling/moodle/commit/b61edd5dd620fdf9e623e66ec3d5171d7ea3f85e))
+
+
+
+### Dependency Updates
+
+* **deps:** Bump moodle image ([f34ba12](https://github.com/CloudTooling/moodle/commit/f34ba125b56568471e6b15e5f1d00c4eac3393be))
+
+
+
+### Documentation
+
+* Update Upgrade guide ([4ced220](https://github.com/CloudTooling/moodle/commit/4ced2207841e3c9b92d69b3319404cc1a58bd34c))
+
+
+
+### Features
+
+* **Release:** Use generic docker-release workflow and pin chart to release image ([b557c3f](https://github.com/CloudTooling/moodle/commit/b557c3fe46dd078f64e0757f930526f2b8f1d6e9))
+
+* **Plugins:** Install and version plugins ([3c1e5b8](https://github.com/CloudTooling/moodle/commit/3c1e5b83a95ba56a433ccec8f06640f8adf420eb))
+
+
+
+
 ## [5.3.0.1](https://github.com/CloudTooling/moodle/compare/v5.3.0...v5.3.0.1) (2026-10-05)
 
 ### Bug Fixes
