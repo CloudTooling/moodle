@@ -12,7 +12,6 @@ annotations:
   licenses: Apache-2.0
   tanzuCategory: application
 apiVersion: v2
-# renovate: datasource=github-tags depName=moodle/moodle
 appVersion: 5.3.0.1
 dependencies:
 - condition: mariadb.enabled
