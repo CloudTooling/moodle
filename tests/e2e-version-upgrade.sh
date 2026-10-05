@@ -13,9 +13,12 @@
 # could see that, since neither ever puts a real older Moodle codebase on the volume. This test
 # does, so a Renovate MOODLE_VERSION bump fails in CI instead of in production.
 #
+# The upgrade boot also pins a small local plugin via MOODLE_PLUGINS, checking that declared
+# plugins land on the persisted volume and get registered by the same admin/cli/upgrade.php run.
+#
 # Usage: tests/e2e-version-upgrade.sh <image-ref> [previous-image-ref]
-#   previous-image-ref defaults to docker.io/cloudtooling/moodle:<newest git tag whose version
-#   differs from the Dockerfile's MOODLE_VERSION>, i.e. the release production is running now.
+#   previous-image-ref defaults to docker.io/cloudtooling/moodle:<newest git tag whose Moodle
+#   version differs from the Dockerfile's MOODLE_VERSION>, i.e. the release production runs now.
 
 set -euo pipefail
 
@@ -24,6 +27,7 @@ PREVIOUS_IMAGE="${2:-}"
 if [[ -z "$PREVIOUS_IMAGE" ]]; then
     repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     current_version="$(sed -n -E 's/^ARG MOODLE_VERSION="([^"]+)"/\1/p' "${repo_root}/Dockerfile")"
+    # Skip image-only revisions of the current Moodle version too (v5.3.0.1 is still Moodle 5.3.0)
     previous_tag="$(git -C "$repo_root" tag --list 'v*' --sort=-v:refname | grep -vE "^v${current_version//./\\.}(\\.[0-9]+)?$" | head -n1)"
     [[ -n "$previous_tag" ]] || { echo "FAIL: no previous release tag found (fetch tags?)"; exit 1; }
     PREVIOUS_IMAGE="docker.io/cloudtooling/moodle:${previous_tag#v}"
@@ -34,19 +38,25 @@ DB="moodle-e2e-upg-db-$$"
 APP="moodle-e2e-upg-app-$$"
 VOL="moodle-e2e-upg-vol-$$"
 DATA_VOL="moodle-e2e-upg-data-$$"
+PLUGIN_DIR="$(mktemp -d)"
+PLUGIN_VERSION=2026100500
 
 cleanup() {
     docker rm -f "$APP" "$DB" >/dev/null 2>&1 || true
     docker volume rm "$VOL" "$DATA_VOL" >/dev/null 2>&1 || true
     docker network rm "$NET" >/dev/null 2>&1 || true
+    rm -rf "$PLUGIN_DIR"
 }
 trap cleanup EXIT
 
+# run_app <image> [MOODLE_PLUGINS json]
 run_app() {
     # Both volumes persisted, mirroring the chart's moodle/ + moodledata/ subPath mounts
     docker run -d --name "$APP" --network "$NET" \
         -v "${VOL}:/bitnami/moodle" \
         -v "${DATA_VOL}:/bitnami/moodledata" \
+        -v "${PLUGIN_DIR}:/e2e-plugins:ro" \
+        -e MOODLE_PLUGINS="${2:-}" \
         -e MOODLE_DATABASE_HOST="$DB" \
         -e MOODLE_DATABASE_PORT_NUMBER=3306 \
         -e MOODLE_DATABASE_USER=bn_moodle \
@@ -107,9 +117,26 @@ previous_release="$(moodle_release)"
 [[ -n "$previous_release" ]] || { echo "FAIL: could not read \$release from the persisted version.php"; exit 1; }
 echo "==> Previous release up: ${previous_release}"
 
+echo "==> Packaging a pinned test plugin (local_e2eprobe ${PLUGIN_VERSION})"
+mkdir -p "${PLUGIN_DIR}/src/e2eprobe/lang/en"
+cat >"${PLUGIN_DIR}/src/e2eprobe/version.php" <<PHP
+<?php
+defined('MOODLE_INTERNAL') || die();
+\$plugin->component = 'local_e2eprobe';
+\$plugin->version = ${PLUGIN_VERSION};
+\$plugin->requires = 2022041900;
+PHP
+cat >"${PLUGIN_DIR}/src/e2eprobe/lang/en/local_e2eprobe.php" <<'PHP'
+<?php
+$string['pluginname'] = 'E2E probe';
+PHP
+COPYFILE_DISABLE=1 tar -czf "${PLUGIN_DIR}/local_e2eprobe.tar.gz" -C "${PLUGIN_DIR}/src" e2eprobe
+chmod -R a+rX "$PLUGIN_DIR"
+plugin_sha256="$( (sha256sum 2>/dev/null || shasum -a 256) <"${PLUGIN_DIR}/local_e2eprobe.tar.gz" | cut -d' ' -f1)"
+
 echo "==> Upgrading the same volumes to the image under test"
 docker rm -f "$APP" >/dev/null
-run_app "$IMAGE"
+run_app "$IMAGE" "[{\"component\":\"local_e2eprobe\",\"url\":\"file:///e2e-plugins/local_e2eprobe.tar.gz\",\"sha256\":\"${plugin_sha256}\"}]"
 wait_for_healthy "upgrade to ${IMAGE}"
 new_release="$(moodle_release)"
 
@@ -118,5 +145,13 @@ if [[ "$new_release" == "$previous_release" ]]; then
     docker logs "$APP" 2>&1 | tail -80
     exit 1
 fi
+
+probe_version="$(docker exec "$APP" php /bitnami/moodle/admin/cli/cfg.php --component=local_e2eprobe --name=version 2>&1 || true)"
+if [[ "$probe_version" != "$PLUGIN_VERSION" ]]; then
+    echo "FAIL: pinned plugin local_e2eprobe not registered by the upgrade (got: ${probe_version})"
+    docker logs "$APP" 2>&1 | tail -80
+    exit 1
+fi
+echo "==> Pinned plugin local_e2eprobe ${probe_version} installed and registered"
 
 echo "==> PASS: ${previous_release} -> ${new_release} upgraded cleanly on a persisted volume"

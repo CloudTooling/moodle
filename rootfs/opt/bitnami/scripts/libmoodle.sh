@@ -232,6 +232,122 @@ moodle_clean_stale_core_files() {
 }
 
 ########################
+# Install/upgrade the third-party plugins pinned in MOODLE_PLUGINS into a Moodle codebase
+# Moodle's own add-on installer writes plugins straight onto the persisted volume, where nothing
+# ever upgrades them again - so a core bump the plugin isn't ready for (e.g. mod_hvp 1.27.2 on
+# Moodle 5.3, "detectedbrokenplugin") crash-loops the pod with no way back. Declaring plugins
+# here instead turns every plugin install/upgrade into a reviewed config change that lands before
+# admin/cli/upgrade.php runs.
+# MOODLE_PLUGINS is a JSON array of {"component", "url", "sha256"?, "path"?} objects:
+#   component - frankenstyle name, e.g. "mod_hvp"
+#   url       - .zip or .tar.gz archive (https:// or file://), e.g. a Moodle plugins directory zip
+#   sha256    - optional checksum of the archive, verified before anything is touched
+#   path      - optional install dir relative to the code root; defaults to the plugin type's
+#               directory from lib/components.json (only needed for subplugins)
+# A plugin is only downloaded again when its url/sha256 change (tracked in a marker file inside
+# the plugin dir); the previous version is backed up to a tarball in moodledata first.
+# Globals:
+#   MOODLE_PLUGINS
+#   MOODLE_DATA_DIR
+#   WEB_SERVER_DAEMON_USER
+# Arguments:
+#   $1 - Moodle code root to install into (the one containing lib/components.json and public/)
+# Returns:
+#   None (exits non-zero on an invalid spec, download, checksum or archive error)
+#########################
+moodle_install_plugins() {
+    local -r code_dir="${1:?missing code dir}"
+    is_empty_value "${MOODLE_PLUGINS:-}" && return 0
+
+    local plugin_list
+    plugin_list="$(MOODLE_CODE_DIR="$code_dir" "${PHP_BIN_DIR:-/opt/bitnami/php/bin}/php" -r '
+        $plugins = json_decode(getenv("MOODLE_PLUGINS"), true);
+        if (!is_array($plugins) || !array_is_list($plugins)) {
+            fwrite(STDERR, "MOODLE_PLUGINS must be a JSON array\n");
+            exit(1);
+        }
+        $components = json_decode((string) @file_get_contents(getenv("MOODLE_CODE_DIR") . "/lib/components.json"), true);
+        $types = $components["plugintypes"] ?? [];
+        foreach ($plugins as $plugin) {
+            $component = $plugin["component"] ?? "";
+            $url = $plugin["url"] ?? "";
+            if (!preg_match("/^([a-z][a-z0-9]*)_([a-z][a-z0-9_]*)$/", $component, $m) || $url === "") {
+                fwrite(STDERR, "Invalid MOODLE_PLUGINS entry: " . json_encode($plugin) . "\n");
+                exit(1);
+            }
+            $path = $plugin["path"] ?? (isset($types[$m[1]]) ? $types[$m[1]] . "/" . $m[2] : "");
+            if ($path === "" || str_contains($path, "..") || str_starts_with($path, "/")) {
+                fwrite(STDERR, "Cannot determine an install path for {$component}, set \"path\" explicitly\n");
+                exit(1);
+            }
+            // \x1f, not \t: read collapses consecutive whitespace IFS chars, dropping an empty sha256
+            echo implode("\x1f", [$component, $url, $plugin["sha256"] ?? "", $path]), "\n";
+        }
+    ')" || exit 1
+
+    local -r staging_dir="${MOODLE_DATA_DIR}/.moodle-plugin-install"
+    local component url sha256 path target source archive root
+    while IFS=$'\x1f' read -r component url sha256 path; do
+        target="${code_dir}/${path}"
+        source="${url} ${sha256}"
+        if [[ -f "${target}/.moodle-plugin-source" && "$(<"${target}/.moodle-plugin-source")" == "$source" ]]; then
+            debug "Plugin ${component} is already installed from ${url}"
+            continue
+        fi
+
+        info "Installing plugin ${component} from ${url}"
+        rm -rf "$staging_dir"
+        mkdir -p "${staging_dir}/extract"
+        archive="${staging_dir}/archive"
+        if ! "${PHP_BIN_DIR:-/opt/bitnami/php/bin}/php" -r '
+            $ctx = stream_context_create(["http" => ["timeout" => 120, "user_agent" => "cloudtooling-moodle"]]);
+            exit(@copy($argv[1], $argv[2], $ctx) ? 0 : 1);' "$url" "$archive"; then
+            error "Could not download ${url} for plugin ${component}"
+            exit 1
+        fi
+        if [[ -n "$sha256" ]] && ! echo "${sha256}  ${archive}" | sha256sum -c --status; then
+            error "Checksum mismatch for plugin ${component}: expected ${sha256}, got $(sha256sum "$archive" | cut -d' ' -f1)"
+            exit 1
+        fi
+        if ! "${PHP_BIN_DIR:-/opt/bitnami/php/bin}/php" -r '
+            $zip = new ZipArchive();
+            if ($zip->open($argv[1]) === true) { exit($zip->extractTo($argv[2]) ? 0 : 1); }
+            exit(1);' "$archive" "${staging_dir}/extract" && ! tar -xzf "$archive" -C "${staging_dir}/extract" 2>/dev/null; then
+            error "Plugin ${component}: ${url} is neither a zip nor a gzipped tar archive"
+            exit 1
+        fi
+        # Plugin archives normally wrap everything in a single top-level folder (the plugin
+        # name for plugins directory zips, "<repo>-<ref>" for GitHub archives) - unwrap it.
+        root="${staging_dir}/extract"
+        if [[ "$(find "$root" -mindepth 1 -maxdepth 1 | wc -l)" -eq 1 && -d "$(find "$root" -mindepth 1 -maxdepth 1)" ]]; then
+            root="$(find "$root" -mindepth 1 -maxdepth 1)"
+        fi
+        if [[ ! -f "${root}/version.php" ]]; then
+            error "Plugin ${component}: ${url} has no version.php at its root"
+            exit 1
+        fi
+        if grep -qE '\$plugin->component\s*=' "${root}/version.php" && ! grep -qE "\\\$plugin->component\s*=\s*['\"]${component}['\"]" "${root}/version.php"; then
+            error "Plugin ${component}: ${url} declares a different component in its version.php"
+            exit 1
+        fi
+        printf '%s' "$source" >"${root}/.moodle-plugin-source"
+
+        if [[ -e "$target" ]]; then
+            local backup_file
+            backup_file="${MOODLE_DATA_DIR}/moodle-plugin-backup-${component}-$(date +%Y%m%d%H%M%S).tar.gz"
+            info "Backing up the previous ${component} to ${backup_file}"
+            tar -C "$(dirname "$target")" -czf "$backup_file" "$(basename "$target")"
+            rm -rf "$target"
+        fi
+        mkdir -p "$(dirname "$target")"
+        # Copy rather than mv: the staging dir lives on moodledata, a different mount than the code
+        cp -a --no-preserve=timestamps "$root" "$target"
+        am_i_root && configure_permissions_ownership "$target" -d "775" -f "664" -u "$WEB_SERVER_DAEMON_USER" -g "root"
+        rm -rf "$staging_dir"
+    done <<<"$plugin_list"
+}
+
+########################
 # Migrate a persisted Moodle codebase predating the Moodle 5.1 "/public" document root split
 # Moodle 5.1 moved all web-accessible code under a new "public/" directory (keeping config.php and
 # admin/cli/* at the root); the Apache vhost baked into this image already points at
@@ -508,6 +624,7 @@ moodle_initialize() {
             # Use daemon:root ownership for compatibility when running as a non-root user
             am_i_root && configure_permissions_ownership "$dir" -d "775" -f "664" -u "$WEB_SERVER_DAEMON_USER" -g "root" -n
         done
+        moodle_install_plugins "$MOODLE_BASE_DIR"
 
         info "Trying to connect to the database server"
         db_type="$MOODLE_DATABASE_TYPE"
@@ -578,6 +695,7 @@ EOF
         moodle_migrate_to_public_layout
         moodle_refresh_core_on_version_change
         moodle_clean_stale_core_files
+        moodle_install_plugins "$MOODLE_VOLUME_DIR"
 
         info "Restoring persisted Moodle installation"
         restore_persisted_app "$app_name" "$MOODLE_DATA_TO_PERSIST"

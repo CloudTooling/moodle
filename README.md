@@ -84,10 +84,42 @@ stripped on every boot, so crossing a new major version needs no manual list mai
 
 ### Third-party plugins
 
-Plugins you installed yourself (via the admin UI, or by copying them onto the volume) live in
-the persisted `public/` tree and survive every refresh **as-is**. The image can't upgrade them,
-because it can't know which plugin release is compatible with the new Moodle version. If a plugin
-isn't ready for the new core, the upgrade aborts and the pod crash-loops, e.g. on Moodle 5.3:
+Declare third-party plugins in the chart values instead of installing them through the admin UI.
+The image installs or upgrades them on every boot, before `admin/cli/upgrade.php` runs, so a
+plugin upgrade is a reviewed values change that ships together with the core bump that needs it:
+
+```yaml
+plugins:
+  - component: mod_hvp
+    # Moodle plugins directory download for one exact version (zip with bundled submodules)
+    url: https://marketplace.moodle.com/api/plugins/mod_hvp/versions/2026090101/download
+    sha256: 188c67fd3d3383909b93564b02ee0eb50e225169ffc2dafb551ddec01d6a5845
+```
+
+- `component` (required): the frankenstyle name. The install directory comes from the plugin
+  type in `lib/components.json`, e.g. `mod_hvp` → `public/mod/hvp`.
+- `url` (required): a `.zip` or `.tar.gz`, either `https://` or `file://`. A single top-level
+  folder in the archive is unwrapped. GitHub source archives miss git submodules, so prefer the
+  plugins directory download.
+- `sha256` (optional, recommended): the archive is verified before anything on disk changes.
+- `path` (optional): the install directory relative to the code root. Only needed for subplugin
+  types, e.g. `public/mod/assign/feedback/example`.
+
+A plugin is only downloaded again when its `url`/`sha256` changes (tracked in a
+`.moodle-plugin-source` marker inside the plugin directory). The previous version is backed up
+to `moodledata/moodle-plugin-backup-<component>-<timestamp>.tar.gz` first. A failed download,
+checksum or archive check stops the boot *before* the upgrade touches the database. Removing an
+entry does **not** uninstall the plugin, so uninstall it under Site administration first. The
+image env var behind this is `MOODLE_PLUGINS`, a JSON array of the same objects.
+
+Before bumping the image across a Moodle major version, check that every declared plugin's
+release supports the target version, and bump it in the same change if needed.
+
+#### Recovering from an incompatible plugin
+
+Plugins installed through the admin UI, or copied onto the volume by hand, survive every refresh
+**as-is**. Once one is incompatible with the new core, the upgrade aborts and the pod
+crash-loops, e.g. on Moodle 5.3:
 
 ```text
 The plugin mod_hvp is defective or outdated; sorry you cannot continue.
@@ -100,18 +132,13 @@ option**. Fix forward instead:
 1. See the actual error: set `BITNAMI_DEBUG=true` (chart `extraEnvVars`, or
    `kubectl set env deploy/moodle BITNAMI_DEBUG=true`). Without it, `admin/cli/upgrade.php`
    output is swallowed and the log just stops at `Running database upgrade`.
-2. Scale the deployment to 0 and start a temporary pod using the same image, with the PVC
-   mounted at `/bitnami/moodle` (subPath `moodle`) and `/bitnami/moodledata` (subPath
-   `moodledata`), running as the same user (`1001`, group `0`), with `command: ["sleep", "3600"]`.
-3. Back up the plugin into moodledata, then replace
-   `/bitnami/moodle/public/<type>/<name>` with a release compatible with the new Moodle version.
-   Use the Moodle plugins directory zip, or a recursive git clone for plugins with submodules
-   such as `mod_hvp`; a GitHub source archive is missing them.
-4. Delete the temporary pod and scale back to 1. The plugin's own DB upgrade runs on boot.
-
-To avoid this, check each third-party plugin's supported Moodle versions before bumping the image
-across a major version, and upgrade plugins first where the new plugin release still supports
-the old core.
+2. Preferred: declare the plugin under `plugins` at a compatible release and redeploy. The
+   manually installed copy is backed up and replaced on the next boot.
+3. If you can't redeploy: scale the deployment to 0 and start a temporary pod using the same
+   image, with the PVC mounted at `/bitnami/moodle` (subPath `moodle`) and `/bitnami/moodledata`
+   (subPath `moodledata`), running as the same user (`1001`, group `0`), with
+   `command: ["sleep", "3600"]`. Back up `/bitnami/moodle/public/<type>/<name>` into
+   moodledata, replace it with a compatible release, delete the pod and scale back to 1.
 
 ## Releasing
 

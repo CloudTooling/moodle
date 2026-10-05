@@ -9,7 +9,8 @@
 FROM docker.io/bitnami/minideb:bookworm
 
 COPY prebuildfs /
-RUN install_packages ca-certificates findutils git tar
+# php-cli + php-zip: moodle_install_plugins parses JSON, downloads and unzips via PHP
+RUN install_packages ca-certificates findutils git tar php-cli php-zip
 RUN git clone --depth 1 --branch v1.11.1 https://github.com/bats-core/bats-core.git /tmp/bats-core \
     && /tmp/bats-core/install.sh /usr/local \
     && rm -rf /tmp/bats-core

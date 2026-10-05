@@ -1,6 +1,6 @@
 # moodle
 
-![Version: 1.0.7](https://img.shields.io/badge/Version-1.0.7-informational?style=flat-square) ![AppVersion: 5.3.0.1](https://img.shields.io/badge/AppVersion-5.3.0.1-informational?style=flat-square)
+![Version: 2.0.0](https://img.shields.io/badge/Version-2.0.0-informational?style=flat-square) ![AppVersion: 5.3.0.1](https://img.shields.io/badge/AppVersion-5.3.0.1-informational?style=flat-square)
 
 Moodle(TM) LMS is an open source online Learning Management System widely used at universities, schools, and corporations. It is modular and highly adaptable to any type of online learning.
 
@@ -189,6 +189,7 @@ Moodle(TM) LMS is an open source online Learning Management System widely used a
 | persistence.hostPath | string | `""` |  |
 | persistence.size | string | `"8Gi"` |  |
 | persistence.storageClass | string | `""` |  |
+| plugins | list | `[]` |  |
 | podAffinityPreset | string | `""` |  |
 | podAnnotations | object | `{}` |  |
 | podAntiAffinityPreset | string | `"soft"` |  |

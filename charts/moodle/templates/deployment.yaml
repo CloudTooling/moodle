@@ -177,6 +177,10 @@ spec:
             {{- end }}
             - name: MOODLE_SKIP_BOOTSTRAP
               value: {{ ternary "yes" "no" .Values.moodleSkipInstall | quote }}
+            {{- if .Values.plugins }}
+            - name: MOODLE_PLUGINS
+              value: {{ .Values.plugins | toJson | quote }}
+            {{- end }}
             - name: MOODLE_USERNAME
               value: {{ .Values.moodleUsername | quote }}
             {{- if .Values.usePasswordFiles }}
