@@ -35,7 +35,13 @@ fi
 # image (see moodle_migrate_to_public_layout below) can leave exactly this kind of core leftover
 # behind. Copied verbatim from $someexamplesofremovedfiles in public/lib/upgradelib.php as shipped
 # in this image; refresh from that file when bumping MOODLE_VERSION across a major version.
+# moodle_known_removed_core_files() also reads the shipped upgradelib.php at runtime, so a
+# forgotten refresh here no longer breaks upgrades - this list is the floor, not the ceiling.
 MOODLE_KNOWN_REMOVED_CORE_FILES=(
+    '/course/tests/behat/activity_navigation_with_restrictions.feature'
+    '/lib/amd/src/deprecated.js'
+    '/lib/amd/src/url.js'
+    '/lib/js/esm/build/react_autoinit.js.map'
     '/availability/renderer.php'
     '/course/tests/behat/course_controls.feature'
     '/lib/amd/src/addblockmodal.js'
@@ -167,6 +173,65 @@ MOODLE_KNOWN_REMOVED_PLUGIN_DIRS=(
 )
 
 ########################
+# List every core file Moodle itself has removed (relative to public/): the hardcoded
+# MOODLE_KNOWN_REMOVED_CORE_FILES plus $someexamplesofremovedfiles as parsed from the shipped
+# image's own public/lib/upgradelib.php, i.e. exactly what upgrade_stale_php_files_present()
+# checks for in the version this image actually runs.
+# Globals:
+#   MOODLE_BASE_DIR
+#   MOODLE_KNOWN_REMOVED_CORE_FILES
+# Arguments:
+#   None
+# Returns:
+#   One path per line
+#########################
+moodle_known_removed_core_files() {
+    local -r upgradelib="${MOODLE_BASE_DIR}/public/lib/upgradelib.php"
+    {
+        printf '%s\n' "${MOODLE_KNOWN_REMOVED_CORE_FILES[@]}"
+        if [[ -f "$upgradelib" ]]; then
+            sed -n '/\$someexamplesofremovedfiles = \[/,/\];/p' "$upgradelib" | grep -o "'/[^']*'" | tr -d "'"
+        fi
+    } | sort -u
+}
+
+########################
+# Remove core files/plugins Moodle itself has removed from a public/ tree
+# Arguments:
+#   $1 - public/ directory to clean
+# Returns:
+#   None
+#########################
+moodle_remove_known_removed_core_content() {
+    local -r public_dir="${1:?missing public dir}"
+    local removed_path
+    while IFS= read -r removed_path; do
+        [[ -n "$removed_path" && -e "${public_dir}${removed_path}" ]] || continue
+        info "Removing stale core leftover ${removed_path}"
+        rm -rf "${public_dir}${removed_path}"
+    done < <(moodle_known_removed_core_files; printf '%s\n' "${MOODLE_KNOWN_REMOVED_PLUGIN_DIRS[@]}")
+}
+
+########################
+# Strip stale core leftovers from the persisted codebase on every boot. The removal steps in
+# moodle_migrate_to_public_layout/moodle_refresh_core_on_version_change only run when those
+# functions fire, so a volume that was already refreshed with an incomplete removed-files list
+# (e.g. 5.2 -> 5.3 before that list was updated) would otherwise stay stuck on "Mixed Moodle
+# versions detected" forever, since its version stamp already matches the image.
+# Globals:
+#   MOODLE_VOLUME_DIR
+# Arguments:
+#   None
+# Returns:
+#   None
+#########################
+moodle_clean_stale_core_files() {
+    ! is_boolean_yes "${MOODLE_SKIP_CORE_REFRESH:-no}" || return 0
+    [[ -d "${MOODLE_VOLUME_DIR}/public" ]] || return 0
+    moodle_remove_known_removed_core_content "${MOODLE_VOLUME_DIR}/public"
+}
+
+########################
 # Migrate a persisted Moodle codebase predating the Moodle 5.1 "/public" document root split
 # Moodle 5.1 moved all web-accessible code under a new "public/" directory (keeping config.php and
 # admin/cli/* at the root); the Apache vhost baked into this image already points at
@@ -233,12 +298,7 @@ moodle_migrate_to_public_layout() {
     # name, which includes core files/plugins Moodle itself has since removed. Clean those out
     # explicitly, matching what Moodle's own upgrade check (and this bootstrap-time plugin scan)
     # require rather than merely recommend. See the arrays' own comments above this function.
-    for removed_file in "${MOODLE_KNOWN_REMOVED_CORE_FILES[@]}"; do
-        [[ -e "${staging_dir}/public${removed_file}" ]] && rm -rf "${staging_dir}/public${removed_file}"
-    done
-    for removed_dir in "${MOODLE_KNOWN_REMOVED_PLUGIN_DIRS[@]}"; do
-        [[ -e "${staging_dir}/public${removed_dir}" ]] && rm -rf "${staging_dir}/public${removed_dir}"
-    done
+    moodle_remove_known_removed_core_content "${staging_dir}/public"
 
     am_i_root && configure_permissions_ownership "$staging_dir" -d "775" -f "664" -u "$WEB_SERVER_DAEMON_USER" -g "root"
 
@@ -294,9 +354,16 @@ moodle_refresh_core_on_version_change() {
 
     local -r persisted_version="$(moodle_version_from_file "${MOODLE_VOLUME_DIR}/public/version.php")"
     local -r fresh_version="$(moodle_version_from_file "${MOODLE_BASE_DIR}/public/version.php")"
-    [[ -n "$persisted_version" && -n "$fresh_version" && "$persisted_version" != "$fresh_version" ]] || return 0
-
-    info "Persisted Moodle codebase (${persisted_version}) differs from the shipped image (${fresh_version}), refreshing core code"
+    [[ -n "$persisted_version" && -n "$fresh_version" ]] || return 0
+    # A differing composer.lock also counts: volumes refreshed by an image predating the root
+    # vendor/ refresh below kept the old dependencies under an already-matching version stamp.
+    if [[ "$persisted_version" == "$fresh_version" ]]; then
+        [[ -f "${MOODLE_BASE_DIR}/composer.lock" ]] || return 0
+        ! cmp -s "${MOODLE_BASE_DIR}/composer.lock" "${MOODLE_VOLUME_DIR}/composer.lock" || return 0
+        info "Persisted Moodle dependencies (composer.lock) differ from the shipped image, refreshing core code"
+    else
+        info "Persisted Moodle codebase (${persisted_version}) differs from the shipped image (${fresh_version}), refreshing core code"
+    fi
 
     local -r backup_file="${MOODLE_DATA_DIR}/moodle-pre-core-refresh-$(date +%Y%m%d%H%M%S).tar.gz"
     info "Backing up the pre-refresh codebase to ${backup_file}"
@@ -311,25 +378,24 @@ moodle_refresh_core_on_version_change() {
     # Overlay the fresh image's public/ tree on top: core files get updated, anything found only
     # in the persisted install (customizations, third-party plugins) is left as copied above.
     cp -a "${MOODLE_BASE_DIR}/public/." "$staging_dir/public/"
-    # The root-level files outside public/ (CLI entrypoints plus the handful of lib bootstrap
-    # files needed before public/'s autoloader is up) are exclusively core-owned - nothing
-    # user-customizable is ever placed there - so fully replace them rather than merge.
-    rm -rf "${staging_dir}/admin/cli"
-    cp -a "${MOODLE_BASE_DIR}/admin/cli" "${staging_dir}/admin/cli"
-    for lib_file in setup.php behat js components.json plugins.json thirdpartylibs.xml; do
-        rm -rf "${staging_dir}/lib/${lib_file}"
-        [[ -e "${MOODLE_BASE_DIR}/lib/${lib_file}" ]] && cp -a "${MOODLE_BASE_DIR}/lib/${lib_file}" "${staging_dir}/lib/${lib_file}"
-    done
+    # Everything the image ships at the root outside public/ (CLI entrypoints, lib bootstrap
+    # files, and the composer-managed vendor/ + composer.json/.lock) is exclusively core-owned -
+    # nothing user-customizable is ever placed there - so fully replace each such entry rather
+    # than merge. Root entries the image doesn't ship (config.php) are kept as copied above.
+    # vendor/ in particular must move in lockstep with the core code: keeping the old one fails
+    # the upgrade with "Package '...' not found in composer.lock" as soon as a release adds a
+    # dependency (league/oauth2-server in 5.3).
+    local root_entry
+    while IFS= read -r -d '' root_entry; do
+        root_entry="$(basename "$root_entry")"
+        rm -rf "${staging_dir:?}/${root_entry}"
+        cp -a "${MOODLE_BASE_DIR}/${root_entry}" "${staging_dir}/${root_entry}"
+    done < <(find "${MOODLE_BASE_DIR}" -mindepth 1 -maxdepth 1 ! -name public ! -name config.php -print0)
 
     # As with the /public migration above, the overlay preserves any old-install content the
     # fresh copy doesn't overwrite by name - including core files/plugins Moodle itself has
     # removed between the two versions. Clean those out explicitly.
-    for removed_file in "${MOODLE_KNOWN_REMOVED_CORE_FILES[@]}"; do
-        [[ -e "${staging_dir}/public${removed_file}" ]] && rm -rf "${staging_dir}/public${removed_file}"
-    done
-    for removed_dir in "${MOODLE_KNOWN_REMOVED_PLUGIN_DIRS[@]}"; do
-        [[ -e "${staging_dir}/public${removed_dir}" ]] && rm -rf "${staging_dir}/public${removed_dir}"
-    done
+    moodle_remove_known_removed_core_content "${staging_dir}/public"
 
     am_i_root && configure_permissions_ownership "$staging_dir" -d "775" -f "664" -u "$WEB_SERVER_DAEMON_USER" -g "root"
 
@@ -511,6 +577,7 @@ EOF
     else
         moodle_migrate_to_public_layout
         moodle_refresh_core_on_version_change
+        moodle_clean_stale_core_files
 
         info "Restoring persisted Moodle installation"
         restore_persisted_app "$app_name" "$MOODLE_DATA_TO_PERSIST"

@@ -102,6 +102,37 @@ file_is() {
     file_is "${MOODLE_VOLUME_DIR}/lib/setup.php" "NEW-SETUP"
 }
 
+@test "refreshes root-level composer.lock and vendor/ from the image, dropping old packages" {
+    write_file "${MOODLE_BASE_DIR}/composer.lock" "NEW-LOCK"
+    write_file "${MOODLE_BASE_DIR}/vendor/league/oauth2-server/src/AuthorizationServer.php" "NEW-PKG"
+    write_file "${MOODLE_VOLUME_DIR}/composer.lock" "OLD-LOCK"
+    write_file "${MOODLE_VOLUME_DIR}/vendor/old/removedpkg/src/Thing.php" "OLD-PKG"
+    moodle_refresh_core_on_version_change
+    file_is "${MOODLE_VOLUME_DIR}/composer.lock" "NEW-LOCK"
+    file_is "${MOODLE_VOLUME_DIR}/vendor/league/oauth2-server/src/AuthorizationServer.php" "NEW-PKG"
+    [ ! -e "${MOODLE_VOLUME_DIR}/vendor/old" ]
+    file_is "${MOODLE_VOLUME_DIR}/config.php" "SITE-CONFIG-SECRET"
+}
+
+@test "refreshes a same-version volume whose composer.lock differs from the image's" {
+    # A volume already refreshed to this version by an image that kept the old vendor/
+    write_file "${MOODLE_VOLUME_DIR}/public/version.php" '$version = 2026091300.00;'
+    write_file "${MOODLE_BASE_DIR}/composer.lock" "NEW-LOCK"
+    write_file "${MOODLE_VOLUME_DIR}/composer.lock" "OLD-LOCK"
+    moodle_refresh_core_on_version_change
+    file_is "${MOODLE_VOLUME_DIR}/composer.lock" "NEW-LOCK"
+    file_is "${MOODLE_VOLUME_DIR}/public/lib/weblib.php" "NEW-CORE-WEBLIB"
+    file_is "${MOODLE_VOLUME_DIR}/config.php" "SITE-CONFIG-SECRET"
+}
+
+@test "is a no-op when versions and composer.lock both already match" {
+    write_file "${MOODLE_VOLUME_DIR}/public/version.php" '$version = 2026091300.00;'
+    write_file "${MOODLE_BASE_DIR}/composer.lock" "SAME-LOCK"
+    write_file "${MOODLE_VOLUME_DIR}/composer.lock" "SAME-LOCK"
+    moodle_refresh_core_on_version_change
+    file_is "${MOODLE_VOLUME_DIR}/public/lib/weblib.php" "OLD-CORE-WEBLIB"
+}
+
 @test "updates the persisted version.php to the shipped image's version" {
     moodle_refresh_core_on_version_change
     file_is "${MOODLE_VOLUME_DIR}/public/version.php" '$version = 2026091300.00;'
@@ -154,4 +185,34 @@ file_is() {
     rm -f "${MOODLE_VOLUME_DIR}/public/version.php"
     moodle_refresh_core_on_version_change
     file_is "${MOODLE_VOLUME_DIR}/public/lib/weblib.php" "OLD-CORE-WEBLIB"
+}
+
+@test "also removes stale files listed only in the shipped image's own upgradelib.php" {
+    write_file "${MOODLE_BASE_DIR}/public/lib/upgradelib.php" "$(printf '%s\n' \
+        '    $someexamplesofremovedfiles = [' \
+        '        // Removed in 9.9.' \
+        "        '/lib/amd/src/only_in_upgradelib.js'," \
+        '    ];')"
+    write_file "${MOODLE_VOLUME_DIR}/public/lib/amd/src/only_in_upgradelib.js" "STALE-JS"
+    moodle_refresh_core_on_version_change
+    [ ! -e "${MOODLE_VOLUME_DIR}/public/lib/amd/src/only_in_upgradelib.js" ]
+}
+
+@test "stale-file cleanup still runs on boot when the versions already match" {
+    # A volume already refreshed to the image's version by an older image whose removed-files
+    # list was incomplete (the 5.2 -> 5.3 production incident, October 2026)
+    write_file "${MOODLE_VOLUME_DIR}/public/version.php" '$version = 2026091300.00;'
+    write_file "${MOODLE_VOLUME_DIR}/public/lib/amd/src/url.js" "STALE-5.2-URL-JS"
+    moodle_refresh_core_on_version_change
+    moodle_clean_stale_core_files
+    [ ! -e "${MOODLE_VOLUME_DIR}/public/lib/amd/src/url.js" ]
+    [ ! -e "${MOODLE_VOLUME_DIR}/public/lib/cronlib.php" ]
+    file_is "${MOODLE_VOLUME_DIR}/public/lib/weblib.php" "OLD-CORE-WEBLIB"
+    file_is "${MOODLE_VOLUME_DIR}/public/mod/customplugin/version.php" "CUSTOM-MOD-PLUGIN"
+}
+
+@test "stale-file cleanup can be disabled via MOODLE_SKIP_CORE_REFRESH" {
+    export MOODLE_SKIP_CORE_REFRESH="yes"
+    moodle_clean_stale_core_files
+    file_is "${MOODLE_VOLUME_DIR}/public/lib/cronlib.php" "STALE-CRONLIB"
 }
