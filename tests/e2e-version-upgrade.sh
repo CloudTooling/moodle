@@ -24,7 +24,7 @@ PREVIOUS_IMAGE="${2:-}"
 if [[ -z "$PREVIOUS_IMAGE" ]]; then
     repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     current_version="$(sed -n -E 's/^ARG MOODLE_VERSION="([^"]+)"/\1/p' "${repo_root}/Dockerfile")"
-    previous_tag="$(git -C "$repo_root" tag --list 'v*' --sort=-v:refname | grep -vx "v${current_version}" | head -n1)"
+    previous_tag="$(git -C "$repo_root" tag --list 'v*' --sort=-v:refname | grep -vE "^v${current_version//./\\.}(\\.[0-9]+)?$" | head -n1)"
     [[ -n "$previous_tag" ]] || { echo "FAIL: no previous release tag found (fetch tags?)"; exit 1; }
     PREVIOUS_IMAGE="docker.io/cloudtooling/moodle:${previous_tag#v}"
 fi
