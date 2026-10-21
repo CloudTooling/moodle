@@ -1,4 +1,13 @@
 
+## [5.3.0.3](https://github.com/CloudTooling/moodle/compare/v5.3.0.2...v5.3.0.3) (2026-10-21)
+
+### Dependency Updates
+
+* **deps:** Update PHP ([e53399a](https://github.com/CloudTooling/moodle/commit/e53399aefdf3ef65d85e423a9dc7e8a11458f9b6))
+
+
+
+
 ## [5.3.0.2](https://github.com/CloudTooling/moodle/compare/v5.3.0.1...v5.3.0.2) (2026-10-05)
 
 ### Bug Fixes
