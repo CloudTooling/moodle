@@ -31,11 +31,11 @@ RUN --mount=type=secret,id=downloads_url,env=SECRET_DOWNLOADS_URL \
     mkdir -p /tmp/bitnami/pkg/cache/ ; cd /tmp/bitnami/pkg/cache/ || exit 1 ; \
     COMPONENTS=( \
       "render-template-1.0.9-167-linux-${OS_ARCH}-debian-12" \
-      "php-8.4.22-2-linux-${OS_ARCH}-debian-12" \
+      "php-8.4.27-1-linux-${OS_ARCH}-debian-12" \
       "apache-2.4.68-1-linux-${OS_ARCH}-debian-12" \
       "postgresql-client-14.23.0-0-linux-${OS_ARCH}-debian-12" \
       "mysql-client-12.3.2-1-linux-${OS_ARCH}-debian-12" \
-      "libphp-8.4.22-1-linux-${OS_ARCH}-debian-12" \
+      "libphp-8.4.27-0-linux-${OS_ARCH}-debian-12" \
       # NOTE: "moodle-${MOODLE_VERSION}-0-linux-${OS_ARCH}-debian-12" intentionally omitted here, \
       # see the TEMPORARY OVERRIDE block below. \
     ) ; \
