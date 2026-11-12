@@ -1,4 +1,13 @@
 
+## [5.3.1](https://github.com/CloudTooling/moodle/compare/v5.3.0.3...v5.3.1) (2026-11-12)
+
+### Dependency Updates
+
+* **deps:** Update dependency moodle/moodle to v5.3.1 ([4652ca9](https://github.com/CloudTooling/moodle/commit/4652ca9fdb25e65e26128b4c65265288bb9443b2))
+
+
+
+
 ## [5.3.0.3](https://github.com/CloudTooling/moodle/compare/v5.3.0.2...v5.3.0.3) (2026-10-21)
 
 ### Dependency Updates
